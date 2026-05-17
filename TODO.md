@@ -5,35 +5,47 @@
 
 ## Up next (roughly in order)
 
-### Real app blocking
-- [x] Build native Android AccessibilityService that detects when a blocked app is foregrounded
-- [x] When a blocked app is detected, overlay a "blocked" screen on top of it
-- [x] Connect the blocked apps list (AsyncStorage) to the AccessibilityService
-
 ### Real GPS / location rules
-- [ ] Request location permission from the user
-- [ ] Use device GPS when creating a location rule (replace the 0,0 placeholder)
-- [ ] Build a background geofence service that monitors if the user enters/exits a rule's radius
-- [ ] When inside a geofence, enforce that zone's blocked app list
+- [x] Request location permission from the user
+- [x] Use device GPS when creating a location rule (replace the 0,0 placeholder)
+- [x] Build a background geofence service that monitors if the user enters/exits a rule's radius
+- [x] When inside a geofence, enforce that zone's blocked app list
+- [x] Map picker — tap on OpenStreetMap to set rule centre coordinates
+- [x] Edit rule — change name, radius, and location after creation
+- [ ] **Known issue:** Geofence triggering unreliable on emulator due to mock GPS + background location permission requirements. Works correctly on a real device with "Allow all the time" location permission granted.
 
 ### Real screen time data
-- [ ] Request "Usage Access" permission from the user
-- [ ] Build a native module using Android UsageStatsManager to read real per-app screen time
-- [ ] Replace the mock data in the Screen Time tab with real numbers
+- [x] Request "Usage Access" permission from the user (banner + opens settings)
+- [x] Build native UsageStatsModule using Android UsageStatsManager
+- [x] Replace the mock data in the Screen Time tab with real numbers
+- [x] Today / This Week toggle with live data
 
 ### Assign apps to location rules
-- [ ] Add UI to select which apps get blocked for each location rule
-- [ ] Store the app-to-rule mapping and pass it to the geofence service
-
-### Accountability partner (Firestore)
-- [ ] Design Firestore data model for users and partner relationships
-- [ ] Build invite flow (generate a code, other user enters it)
-- [ ] Let the partner lock/unlock settings remotely in real time
-- [ ] Push notifications when the partner locks or unlocks you
+- [x] Add UI to select which apps get blocked for each location rule
+- [x] Store the app-to-rule mapping and pass it to the geofence service
 
 ### Read installed apps
-- [ ] Build a native Android module that returns the list of apps actually installed on the device
-- [ ] Replace the hardcoded app list in Blocked Apps with the real installed apps
+- [x] Build native InstalledAppsModule using Android PackageManager
+- [x] Replace the hardcoded app list in Blocked Apps with real installed apps (falls back to hardcoded list if native not ready)
+
+### Accountability partner (Firestore)
+- [x] Design Firestore data model (`/users/{uid}` with inviteCode, partnerId, isLocking)
+- [x] PartnerService.ts — getOrCreateUserDoc, connectPartner, disconnectPartner, setLocking, subscribeToPartner
+- [x] LockScreen — show invite code, enter partner code, connect flow, real-time partner lock status
+- [ ] **Requires Firestore security rules** — set these in Firebase console before testing:
+  ```
+  rules_version = '2';
+  service cloud.firestore {
+    match /databases/{database}/documents {
+      match /users/{uid} {
+        allow read: if request.auth != null;
+        allow write: if request.auth.uid == uid;
+      }
+    }
+  }
+  ```
+- [ ] Push notifications when partner locks/unlocks you (requires FCM setup)
+- [ ] Show lock/unlock state correctly from MY isLocking field (currently needs partner doc loaded)
 
 ## Done
 - [x] Firebase project created and connected
@@ -44,3 +56,5 @@
 - [x] Location rules save to device
 - [x] Self-lock timer with 1-hour unlock delay
 - [x] Tab navigation fixed
+- [x] Real app blocking via AccessibilityService — shows "blocked" overlay screen
+- [x] Blocked apps list synced to native service via SharedPreferences

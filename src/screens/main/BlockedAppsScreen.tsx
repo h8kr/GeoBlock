@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useCallback} from 'react';
 import {
   View,
   Text,
@@ -12,21 +12,9 @@ import {
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useAppContext} from '../../store/AppContext';
 import BlockingModule from '../../native/BlockingModule';
+import InstalledAppsModule, {InstalledApp} from '../../native/InstalledAppsModule';
+import {COMMON_APPS} from '../../store/apps';
 import type {BlockedApp} from '../../types';
-
-// Common apps to block — in production this comes from the installed apps list via native module
-const COMMON_APPS: Omit<BlockedApp, 'isBlocked'>[] = [
-  {id: '1', packageName: 'com.instagram.android', appName: 'Instagram'},
-  {id: '2', packageName: 'com.zhiliaoapp.musically', appName: 'TikTok'},
-  {id: '3', packageName: 'com.twitter.android', appName: 'X (Twitter)'},
-  {id: '4', packageName: 'com.snapchat.android', appName: 'Snapchat'},
-  {id: '5', packageName: 'com.facebook.katana', appName: 'Facebook'},
-  {id: '6', packageName: 'com.google.android.youtube', appName: 'YouTube'},
-  {id: '7', packageName: 'com.reddit.frontpage', appName: 'Reddit'},
-  {id: '8', packageName: 'com.discord', appName: 'Discord'},
-  {id: '9', packageName: 'com.netflix.mediaclient', appName: 'Netflix'},
-  {id: '10', packageName: 'com.amazon.avod.thirdpartyclient', appName: 'Prime Video'},
-];
 
 export default function BlockedAppsScreen() {
   const {store} = useAppContext();
@@ -34,9 +22,13 @@ export default function BlockedAppsScreen() {
   const {blockedApps, updateBlockedApps, selfLock, lockMode, partner} = store;
   const [search, setSearch] = useState('');
   const [serviceEnabled, setServiceEnabled] = useState<boolean | null>(null);
+  const [appList, setAppList] = useState<InstalledApp[]>(COMMON_APPS);
 
   useEffect(() => {
     BlockingModule.isAccessibilityServiceEnabled().then(setServiceEnabled);
+    InstalledAppsModule.getInstalledApps()
+      .then(apps => { if (apps.length > 0) setAppList(apps); })
+      .catch(() => {}); // fall back to COMMON_APPS if native module not ready
   }, []);
 
   const isLocked =
@@ -65,7 +57,7 @@ export default function BlockedAppsScreen() {
     updateBlockedApps(updated);
   }
 
-  const filtered = COMMON_APPS.filter(a =>
+  const filtered = appList.filter(a =>
     a.appName.toLowerCase().includes(search.toLowerCase()),
   );
 

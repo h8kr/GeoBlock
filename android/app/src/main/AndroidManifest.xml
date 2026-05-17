@@ -1,6 +1,11 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
 
     <application
       android:name=".MainApplication"
@@ -29,6 +34,9 @@
           android:launchMode="singleInstance"
           android:taskAffinity=""
           android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+      <receiver
+          android:name=".GeofenceTransitionReceiver"
+          android:exported="false" />
       <service
           android:name=".GeoBlockAccessibilityService"
           android:exported="true"

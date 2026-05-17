@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "360649833441",
+    "project_id": "geoblock-3cef5",
+    "storage_bucket": "geoblock-3cef5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:360649833441:android:758e69e36f9dc795fff0a0",
+        "android_client_info": {
+          "package_name": "com.geoblock"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBnwil0SJJUJpOaS5Kd0pKbg2U3o1ifOfI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

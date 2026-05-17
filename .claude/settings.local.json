@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"c:\\\\Users\\\\gavri\\\\GeoBlock\" log --oneline -10)",
+      "Bash(npm --version)",
+      "Bash(npx react-native *)",
+      "Bash(java -version)",
+      "Bash(adb --version)",
+      "PowerShell($env:ANDROID_HOME; $env:ANDROID_SDK_ROOT; Test-Path \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\" ; Test-Path \"C:\\\\Android\\\\Sdk\")",
+      "PowerShell($sdk = \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\"; Test-Path \"$sdk\\\\platform-tools\\\\adb.exe\"; & \"$sdk\\\\platform-tools\\\\adb.exe\" version 2>&1)",
+      "PowerShell(& \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\" devices)",
+      "Bash(git config *)",
+      "Bash(git commit *)",
+      "Bash(cmd.exe /c \"gradlew.bat app:installDebug -x lint -PreactNativeDevServerPort=8081\")",
+      "PowerShell(winget --version 2>&1)",
+      "PowerShell(winget install EclipseAdoptium.Temurin.21.JDK --accept-package-agreements --accept-source-agreements 2>&1)",
+      "Bash(find ~/.gradle/caches -name \"*foojay*\" 2>/dev/null | head -20)",
+      "Read(//c/Users/gavri/.gradle/caches/**)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "Bash(mkdir -p \"c:\\\\Users\\\\gavri\\\\GeoBlock\\\\.claude\")",
+      "Bash(echo '{\"permissions\":{\"defaultMode\":\"bypassPermissions\"}}')",
+      "Bash(rm -rf ~/.gradle/caches/9.3.1/ && echo \"Cache cleared\")",
+      "Bash(./gradlew.bat --stop)",
+      "Bash(rm -rf ~/.gradle/caches/9.3.1/ ~/.gradle/caches/8.10.2/ ~/.gradle/wrapper/dists/gradle-9.3.1*)",
+      "Bash(adb devices *)",
+      "PowerShell(Set-Location \"c:\\\\Users\\\\gavri\\\\GeoBlock\"; Start-Process powershell -ArgumentList \"-NoExit\", \"-Command\", \"cd 'c:\\\\Users\\\\gavri\\\\GeoBlock'; npx react-native start --reset-cache 2>&1\" -WindowStyle Normal; Start-Sleep -Seconds 15; netstat -ano | Select-String \":8081\")",
+      "PowerShell($adb = \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\"; & $adb -s emulator-5554 reverse tcp:8081 tcp:8081; Write-Host \"Forwarded\"; Start-Sleep -Seconds 2; & $adb -s emulator-5554 shell am force-stop com.geoblock; Start-Sleep -Seconds 1; & $adb -s emulator-5554 shell monkey -p com.geoblock 1)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\gavri\\.gradle\\caches\\9.3.1"
+    ]
+  }
+}

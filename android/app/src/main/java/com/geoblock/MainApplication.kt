@@ -15,6 +15,9 @@ class MainApplication : Application(), ReactApplication {
       packageList =
         PackageList(this).packages.apply {
           add(BlockingPackage())
+          add(GeofencePackage())
+          add(InstalledAppsPackage())
+          add(UsageStatsPackage())
         },
     )
   }

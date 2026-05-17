@@ -13,7 +13,8 @@ class GeoBlockAccessibilityService : AccessibilityService() {
 
         val prefs = getSharedPreferences("GeoBlockPrefs", MODE_PRIVATE)
         val blockedJson = prefs.getString("blocked_apps", "") ?: return
-        if (blockedJson.contains("\"$packageName\"")) {
+        val geofenceJson = prefs.getString("geofence_blocked_apps", "") ?: ""
+        if (blockedJson.contains("\"$packageName\"") || geofenceJson.contains("\"$packageName\"")) {
             startActivity(
                 Intent(this, BlockedActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
