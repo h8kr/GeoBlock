@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">GeoBlock</string>
+    <string name="accessibility_description">GeoBlock uses accessibility access to detect when a blocked app is opened and redirect you away from it.</string>
 </resources>
