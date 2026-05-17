@@ -47,6 +47,34 @@
 - [ ] Push notifications when partner locks/unlocks you (requires FCM setup)
 - [ ] Show lock/unlock state correctly from MY isLocking field (currently needs partner doc loaded)
 
+## Before Google Play Store
+
+### Must fix
+- [ ] Remove the DEV reset button from the Lock screen (it's visible to all users)
+- [ ] Test everything on a real physical Android device (nothing tested off emulator yet)
+- [ ] Verify geofencing works end-to-end on a real device with "Allow all the time" location
+- [ ] App icon — proper icon in all required sizes
+- [ ] Play Store listing — screenshots, description, content rating questionnaire
+- [ ] Privacy policy page — required by Google, especially since the app uses location data and an AccessibilityService
+
+### Accessibility Service approval (the hard one)
+- [ ] Submit a permission declaration form to Google explaining why the app needs AccessibilityService
+- [ ] Record a video demonstrating the exact use case (Google requires this)
+- [ ] Apps that use AccessibilityService for app blocking have been rejected before — be prepared to appeal or find an alternative approach
+
+### Known limitations to fix or disclose
+- [ ] The accessibility service can be disabled by the user from Android Settings, bypassing all blocking — a determined user can always escape
+- [ ] No error handling if Firebase goes down
+- [ ] No offline mode — app requires internet for auth and partner features
+
+## iOS — Separate major project
+- [ ] iOS has no equivalent to Android's AccessibilityService — app blocking works completely differently on iOS
+- [ ] Would need to use Apple's Screen Time API (heavily restricted, only available via parental controls framework)
+- [ ] Screen time usage data is not accessible to third-party apps on iOS at all
+- [ ] All 5 native Kotlin modules need to be rewritten in Swift from scratch (blocking, geofencing, installed apps, usage stats, accessibility)
+- [ ] Geofencing API is different on iOS (CLLocationManager + CLCircularRegion)
+- [ ] Realistically iOS is months of additional work after the Android version ships
+
 ## Done
 - [x] Firebase project created and connected
 - [x] Real login / sign up with email and password
