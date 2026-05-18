@@ -1,5 +1,5 @@
-import firestore from '@react-native-firebase/firestore';
-import auth from '@react-native-firebase/auth';
+import {getFirestore, collection, doc, getDoc, setDoc, updateDoc, query, where, getDocs, onSnapshot} from '@react-native-firebase/firestore';
+import {getAuth} from '@react-native-firebase/auth';
 
 function randomCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -14,65 +14,63 @@ export interface UserDoc {
 }
 
 export async function getOrCreateUserDoc(): Promise<UserDoc> {
-  const uid = auth().currentUser?.uid;
+  const uid = getAuth().currentUser?.uid;
   if (!uid) throw new Error('Not logged in');
-  const ref = firestore().collection('users').doc(uid);
-  const snap = await ref.get();
+  const db = getFirestore();
+  const ref = doc(db, 'users', uid);
+  const snap = await getDoc(ref);
   if (!snap.exists) {
     const data: UserDoc = {
-      displayName: auth().currentUser?.displayName ?? '',
-      email: auth().currentUser?.email ?? '',
+      displayName: getAuth().currentUser?.displayName ?? '',
+      email: getAuth().currentUser?.email ?? '',
       inviteCode: randomCode(),
       partnerId: null,
       isLocking: false,
     };
-    await ref.set(data);
+    await setDoc(ref, data);
     return data;
   }
   return snap.data() as UserDoc;
 }
 
 export async function connectPartner(code: string): Promise<UserDoc> {
-  const uid = auth().currentUser?.uid;
+  const uid = getAuth().currentUser?.uid;
   if (!uid) throw new Error('Not logged in');
-  const snap = await firestore()
-    .collection('users')
-    .where('inviteCode', '==', code.toUpperCase().trim())
-    .get();
+  const db = getFirestore();
+  const q = query(collection(db, 'users'), where('inviteCode', '==', code.toUpperCase().trim()));
+  const snap = await getDocs(q);
   if (snap.empty) throw new Error('No account found with that code. Double-check it and try again.');
   const partnerDoc = snap.docs[0];
   if (partnerDoc.id === uid) throw new Error("That's your own invite code.");
   if ((partnerDoc.data() as UserDoc).partnerId) throw new Error('That person already has a partner.');
-  await firestore().collection('users').doc(uid).update({partnerId: partnerDoc.id});
-  await firestore().collection('users').doc(partnerDoc.id).update({partnerId: uid});
+  await updateDoc(doc(db, 'users', uid), {partnerId: partnerDoc.id});
+  await updateDoc(doc(db, 'users', partnerDoc.id), {partnerId: uid});
   return partnerDoc.data() as UserDoc;
 }
 
 export async function disconnectPartner(): Promise<void> {
-  const uid = auth().currentUser?.uid;
+  const uid = getAuth().currentUser?.uid;
   if (!uid) return;
-  const snap = await firestore().collection('users').doc(uid).get();
+  const db = getFirestore();
+  const snap = await getDoc(doc(db, 'users', uid));
   const partnerId = (snap.data() as UserDoc)?.partnerId;
-  await firestore().collection('users').doc(uid).update({partnerId: null, isLocking: false});
+  await updateDoc(doc(db, 'users', uid), {partnerId: null, isLocking: false});
   if (partnerId) {
-    await firestore().collection('users').doc(partnerId).update({partnerId: null, isLocking: false});
+    await updateDoc(doc(db, 'users', partnerId), {partnerId: null, isLocking: false});
   }
 }
 
 export async function setLocking(isLocking: boolean): Promise<void> {
-  const uid = auth().currentUser?.uid;
+  const uid = getAuth().currentUser?.uid;
   if (!uid) return;
-  await firestore().collection('users').doc(uid).update({isLocking});
+  await updateDoc(doc(getFirestore(), 'users', uid), {isLocking});
 }
 
 export function subscribeToPartner(
   partnerId: string,
   onData: (doc: UserDoc) => void,
 ): () => void {
-  return firestore()
-    .collection('users')
-    .doc(partnerId)
-    .onSnapshot(snap => {
-      if (snap.exists) onData(snap.data() as UserDoc);
-    });
+  return onSnapshot(doc(getFirestore(), 'users', partnerId), snap => {
+    if (snap.exists) onData(snap.data() as UserDoc);
+  });
 }

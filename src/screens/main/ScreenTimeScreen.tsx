@@ -1,14 +1,8 @@
-import React, {useState, useEffect, useCallback} from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-} from 'react-native';
+import React, {useState, useEffect, useCallback, useMemo} from 'react';
+import {View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import UsageStatsModule, {AppUsage} from '../../native/UsageStatsModule';
+import {useTheme, Colors} from '../../theme';
 
 function formatTime(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -21,6 +15,8 @@ type Period = 'today' | 'week';
 
 export default function ScreenTimeScreen() {
   const insets = useSafeAreaInsets();
+  const {colors} = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [period, setPeriod] = useState<Period>('today');
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [usage, setUsage] = useState<AppUsage[]>([]);
@@ -50,28 +46,21 @@ export default function ScreenTimeScreen() {
   const total = usage.reduce((sum, a) => sum + a.minutes, 0);
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[styles.content, {paddingTop: insets.top + 16}]}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, {paddingTop: insets.top + 16}]}>
       <Text style={styles.heading}>Screen Time</Text>
       <Text style={styles.subheading}>See where your time goes.</Text>
 
       {hasPermission === false && (
-        <TouchableOpacity
-          style={styles.permBanner}
-          onPress={async () => {
-            UsageStatsModule.openUsageSettings();
-            // Re-check after a short delay (user comes back from settings)
-            setTimeout(async () => {
-              const granted = await UsageStatsModule.hasUsagePermission();
-              setHasPermission(granted);
-              if (granted) loadStats();
-            }, 2000);
-          }}>
+        <TouchableOpacity style={styles.permBanner} onPress={async () => {
+          UsageStatsModule.openUsageSettings();
+          setTimeout(async () => {
+            const granted = await UsageStatsModule.hasUsagePermission();
+            setHasPermission(granted);
+            if (granted) loadStats();
+          }, 2000);
+        }}>
           <Text style={styles.permTitle}>Usage Access not enabled</Text>
-          <Text style={styles.permBody}>
-            Tap here → find GeoBlock → enable "Permit usage access" to see real screen time data.
-          </Text>
+          <Text style={styles.permBody}>Tap here → find GeoBlock → enable "Permit usage access" to see real screen time data.</Text>
         </TouchableOpacity>
       )}
 
@@ -87,10 +76,7 @@ export default function ScreenTimeScreen() {
 
           <View style={styles.segmentRow}>
             {(['today', 'week'] as Period[]).map(p => (
-              <TouchableOpacity
-                key={p}
-                style={[styles.segment, period === p && styles.segmentActive]}
-                onPress={() => setPeriod(p)}>
+              <TouchableOpacity key={p} style={[styles.segment, period === p && styles.segmentActive]} onPress={() => setPeriod(p)}>
                 <Text style={[styles.segmentText, period === p && styles.segmentTextActive]}>
                   {p === 'today' ? 'Today' : 'This Week'}
                 </Text>
@@ -131,69 +117,41 @@ export default function ScreenTimeScreen() {
         </>
       )}
 
-      {hasPermission === null && (
-        <ActivityIndicator color="#4f46e5" style={{marginTop: 40}} />
-      )}
+      {hasPermission === null && <ActivityIndicator color={colors.accent} style={{marginTop: 40}} />}
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#0f0f0f'},
-  content: {paddingHorizontal: 20, paddingBottom: 40},
-  heading: {fontSize: 28, fontWeight: '800', color: '#fff', marginBottom: 4},
-  subheading: {fontSize: 14, color: '#888', marginBottom: 20},
-  permBanner: {
-    backgroundColor: '#1c1400',
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#854d0e',
-  },
-  permTitle: {color: '#fbbf24', fontSize: 13, fontWeight: '700', marginBottom: 4},
-  permBody: {color: '#92400e', fontSize: 12, lineHeight: 18},
-  totalCard: {
-    backgroundColor: '#4f46e5',
-    borderRadius: 16,
-    padding: 22,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  totalLabel: {fontSize: 13, color: '#a5b4fc', marginBottom: 4},
-  totalValue: {fontSize: 44, fontWeight: '800', color: '#fff'},
-  totalSub: {fontSize: 13, color: '#a5b4fc', marginTop: 4},
-  segmentRow: {
-    flexDirection: 'row',
-    backgroundColor: '#1c1c1c',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 20,
-  },
-  segment: {flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 10},
-  segmentActive: {backgroundColor: '#4f46e5'},
-  segmentText: {fontSize: 14, color: '#888', fontWeight: '600'},
-  segmentTextActive: {color: '#fff'},
-  section: {
-    backgroundColor: '#1c1c1c',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
-  },
-  appRow: {flexDirection: 'row', alignItems: 'center', paddingVertical: 10},
-  appIcon: {
-    width: 38, height: 38, borderRadius: 10, backgroundColor: '#2a2a2a',
-    justifyContent: 'center', alignItems: 'center', marginRight: 12,
-  },
-  appIconText: {fontSize: 16, fontWeight: '700', color: '#fff'},
-  appInfo: {flex: 1},
-  appTopRow: {flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6},
-  appName: {fontSize: 14, fontWeight: '600', color: '#fff'},
-  appTime: {fontSize: 14, color: '#888'},
-  barBg: {height: 4, backgroundColor: '#2a2a2a', borderRadius: 4},
-  barFill: {height: 4, backgroundColor: '#4f46e5', borderRadius: 4},
-  separator: {height: 1, backgroundColor: '#2a2a2a'},
-  empty: {alignItems: 'center', paddingTop: 40},
-  emptyText: {color: '#555', fontSize: 14},
-});
+function createStyles(c: Colors) {
+  return StyleSheet.create({
+    container: {flex: 1, backgroundColor: c.background},
+    content: {paddingHorizontal: 20, paddingBottom: 40},
+    heading: {fontSize: 28, fontWeight: '800', color: c.text, marginBottom: 4},
+    subheading: {fontSize: 14, color: c.textSecondary, marginBottom: 20},
+    permBanner: {backgroundColor: c.warningBg, borderRadius: 10, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: c.warningBorder},
+    permTitle: {color: c.warning, fontSize: 13, fontWeight: '700', marginBottom: 4},
+    permBody: {color: c.warningText, fontSize: 12, lineHeight: 18},
+    totalCard: {backgroundColor: c.accent, borderRadius: 16, padding: 22, alignItems: 'center', marginBottom: 20},
+    totalLabel: {fontSize: 13, color: '#a5b4fc', marginBottom: 4},
+    totalValue: {fontSize: 44, fontWeight: '800', color: '#fff'},
+    totalSub: {fontSize: 13, color: '#a5b4fc', marginTop: 4},
+    segmentRow: {flexDirection: 'row', backgroundColor: c.surface, borderRadius: 12, padding: 4, marginBottom: 20},
+    segment: {flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 10},
+    segmentActive: {backgroundColor: c.accent},
+    segmentText: {fontSize: 14, color: c.textSecondary, fontWeight: '600'},
+    segmentTextActive: {color: '#fff'},
+    section: {backgroundColor: c.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: c.border},
+    appRow: {flexDirection: 'row', alignItems: 'center', paddingVertical: 10},
+    appIcon: {width: 38, height: 38, borderRadius: 10, backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center', marginRight: 12},
+    appIconText: {fontSize: 16, fontWeight: '700', color: c.text},
+    appInfo: {flex: 1},
+    appTopRow: {flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6},
+    appName: {fontSize: 14, fontWeight: '600', color: c.text},
+    appTime: {fontSize: 14, color: c.textSecondary},
+    barBg: {height: 4, backgroundColor: c.surfaceSecondary, borderRadius: 4},
+    barFill: {height: 4, backgroundColor: c.accent, borderRadius: 4},
+    separator: {height: 1, backgroundColor: c.border},
+    empty: {alignItems: 'center', paddingTop: 40},
+    emptyText: {color: c.textMuted, fontSize: 14},
+  });
+}

@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useRef} from 'react';
+import React, {useState, useEffect, useRef, useMemo} from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,9 @@ import {
   Clipboard,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {getAuth} from '@react-native-firebase/auth';
 import {useAppContext} from '../../store/AppContext';
+import {useTheme, Colors} from '../../theme';
 import {
   getOrCreateUserDoc,
   connectPartner,
@@ -20,6 +22,17 @@ import {
   subscribeToPartner,
   UserDoc,
 } from '../../services/PartnerService';
+
+function formatAge(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  const m = Math.floor(diff / 60000);
+  const h = Math.floor(m / 60);
+  const d = Math.floor(h / 24);
+  if (d > 0) return `${d}d ago`;
+  if (h > 0) return `${h}h ago`;
+  if (m > 0) return `${m}m ago`;
+  return 'just now';
+}
 
 function formatCountdown(ms: number): string {
   const totalSeconds = Math.ceil(ms / 1000);
@@ -31,8 +44,11 @@ function formatCountdown(ms: number): string {
 
 export default function LockScreen() {
   const {store} = useAppContext();
+  const {colors} = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-  const {lockMode, selfLock, partner, updateLockMode, activateSelfLock, requestSelfUnlock, cancelSelfUnlock, getUnlockCountdownMs, devResetLock, setPartner} = store;
+  const {lockMode, selfLock, partner, lockHistory, updateLockMode, activateSelfLock, requestSelfUnlock, cancelSelfUnlock, getUnlockCountdownMs, devResetLock, setPartner, addLockEvent} = store;
+  const isAdmin = getAuth().currentUser?.email === 'gavrielchaim123@gmail.com';
   const [countdown, setCountdown] = useState(0);
 
   // Partner mode state
@@ -40,7 +56,10 @@ export default function LockScreen() {
   const [partnerDoc, setPartnerDoc] = useState<UserDoc | null>(null);
   const [codeInput, setCodeInput] = useState('');
   const [loadingPartner, setLoadingPartner] = useState(false);
+  const [firestoreError, setFirestoreError] = useState(false);
   const unsubRef = useRef<(() => void) | null>(null);
+  const myUnsubRef = useRef<(() => void) | null>(null);
+  const prevPartnerLocking = useRef<boolean | undefined>(undefined);
 
   useEffect(() => {
     if (!selfLock.unlockRequestedAt) return;
@@ -50,6 +69,7 @@ export default function LockScreen() {
       if (remaining <= 0) {
         clearInterval(interval);
         store.updateSelfLock({...selfLock, isLocked: false, unlockRequestedAt: null});
+        addLockEvent('self_lock_off', 'Self-lock unlocked after countdown');
       }
     }, 1000);
     setCountdown(getUnlockCountdownMs());
@@ -59,29 +79,39 @@ export default function LockScreen() {
   // Load partner data when in partner mode
   useEffect(() => {
     if (lockMode !== 'partner') return;
+    const uid = auth().currentUser?.uid;
+    if (!uid) return;
     getOrCreateUserDoc().then(doc => {
+      setFirestoreError(false);
       setMyDoc(doc);
+      myUnsubRef.current?.();
+      myUnsubRef.current = subscribeToPartner(uid, updated => setMyDoc(updated));
       if (doc.partnerId) {
         subscribeToPartnerDoc(doc.partnerId);
       }
-    }).catch(() => {});
+    }).catch(() => setFirestoreError(true));
   }, [lockMode]);
 
   function subscribeToPartnerDoc(partnerId: string) {
     if (unsubRef.current) unsubRef.current();
     unsubRef.current = subscribeToPartner(partnerId, doc => {
+      if (prevPartnerLocking.current !== undefined && prevPartnerLocking.current !== doc.isLocking) {
+        addLockEvent(
+          doc.isLocking ? 'partner_locked_you' : 'partner_unlocked_you',
+          doc.isLocking ? 'Partner locked your settings' : 'Partner unlocked your settings',
+        );
+      }
+      prevPartnerLocking.current = doc.isLocking;
       setPartnerDoc(doc);
-      setPartner({
-        uid: partnerId,
-        displayName: doc.displayName,
-        email: doc.email,
-        isLockingYou: doc.isLocking,
-      });
+      setPartner({uid: partnerId, displayName: doc.displayName, email: doc.email, isLockingYou: doc.isLocking});
     });
   }
 
   useEffect(() => {
-    return () => { unsubRef.current?.(); };
+    return () => {
+      unsubRef.current?.();
+      myUnsubRef.current?.();
+    };
   }, []);
 
   async function handleConnectPartner() {
@@ -114,8 +144,7 @@ export default function LockScreen() {
   }
 
   async function handleToggleLock() {
-    const nowLocking = !partnerDoc?.isLocking;
-    // "isLocking" on my doc means I am locking my partner
+    const nowLocking = !myDoc?.isLocking;
     try {
       await setLocking(nowLocking);
     } catch (e: any) {
@@ -129,6 +158,8 @@ export default function LockScreen() {
       return;
     }
     updateLockMode(mode);
+    addLockEvent(mode === 'self' ? 'self_mode_enabled' : 'partner_mode_enabled',
+      mode === 'self' ? 'Self-lock mode enabled' : 'Partner mode enabled');
   }
 
   function handleDisableMode() {
@@ -143,6 +174,9 @@ export default function LockScreen() {
     if (lockMode === 'partner') {
       disconnectPartner().catch(() => {});
       setPartner(null);
+      addLockEvent('partner_mode_disabled', 'Partner mode disabled');
+    } else {
+      addLockEvent('self_mode_disabled', 'Self-lock mode disabled');
     }
     updateLockMode('none');
   }
@@ -296,11 +330,12 @@ export default function LockScreen() {
                   When you lock your partner, they cannot change their blocked apps until you unlock them.
                 </Text>
                 <TouchableOpacity
-                  style={[styles.primaryButton, {marginTop: 12}]}
+                  style={[myDoc?.isLocking ? styles.warningButton : styles.primaryButton, {marginTop: 12}]}
                   onPress={handleToggleLock}>
-                  <Text style={styles.primaryButtonText}>
-                    {/* We'd need to track our own isLocking state — for now show toggle */}
-                    Toggle Lock on {partnerDoc.displayName || 'Partner'}
+                  <Text style={myDoc?.isLocking ? styles.warningButtonText : styles.primaryButtonText}>
+                    {myDoc?.isLocking
+                      ? `Unlock ${partnerDoc.displayName || 'Partner'}`
+                      : `Lock ${partnerDoc.displayName || 'Partner'}`}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -311,8 +346,21 @@ export default function LockScreen() {
             </View>
           )}
 
-          {/* Loading */}
-          {!myDoc && <ActivityIndicator color="#4f46e5" style={{marginTop: 20}} />}
+          {/* Loading / error */}
+          {!myDoc && !firestoreError && <ActivityIndicator color="#4f46e5" style={{marginTop: 20}} />}
+          {firestoreError && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorBannerText}>Couldn't connect to server. Check your internet connection.</Text>
+              <TouchableOpacity onPress={() => {
+                setFirestoreError(false);
+                getOrCreateUserDoc()
+                  .then(doc => { setMyDoc(doc); })
+                  .catch(() => setFirestoreError(true));
+              }}>
+                <Text style={styles.errorBannerRetry}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           <TouchableOpacity style={[styles.ghostButton, {marginTop: 8}]} onPress={handleDisableMode}>
             <Text style={styles.ghostButtonText}>Disable Partner Mode</Text>
@@ -320,77 +368,73 @@ export default function LockScreen() {
         </View>
       )}
 
-      <TouchableOpacity style={styles.devButton} onPress={devResetLock}>
-        <Text style={styles.devButtonText}>⚙ DEV: Reset all locks</Text>
-      </TouchableOpacity>
+      {lockHistory.length > 0 && (
+        <View style={styles.historySection}>
+          <Text style={styles.historySectionTitle}>Activity</Text>
+          {lockHistory.slice(0, 10).map(event => (
+            <View key={event.id} style={styles.historyRow}>
+              <Text style={styles.historyLabel}>{event.label}</Text>
+              <Text style={styles.historyTime}>{formatAge(event.timestamp)}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {isAdmin && (
+        <TouchableOpacity style={styles.devButton} onPress={devResetLock}>
+          <Text style={styles.devButtonText}>⚙ DEV: Reset all locks</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#0f0f0f'},
-  content: {paddingHorizontal: 20, paddingBottom: 40},
-  heading: {fontSize: 28, fontWeight: '800', color: '#fff', marginBottom: 4},
-  subheading: {fontSize: 14, color: '#888', marginBottom: 24},
-  sectionTitle: {fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 14},
-  optionCard: {
-    backgroundColor: '#1c1c1c', borderRadius: 16, padding: 18, marginBottom: 12,
-    borderWidth: 1, borderColor: '#2a2a2a',
-  },
-  optionTop: {flexDirection: 'row', alignItems: 'center', marginBottom: 8},
-  optionIcon: {fontSize: 20, marginRight: 10},
-  optionTitle: {fontSize: 16, fontWeight: '700', color: '#fff'},
-  optionDesc: {fontSize: 14, color: '#888', lineHeight: 21},
-  statusCard: {
-    borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1,
-    backgroundColor: '#1c1c1c', borderColor: '#2a2a2a',
-  },
-  statusCardLocked: {backgroundColor: '#1e1b4b', borderColor: '#4f46e5'},
-  statusCardUnlocked: {backgroundColor: '#1c1c1c', borderColor: '#2a2a2a'},
-  statusCardTitle: {fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 6},
-  statusCardSub: {fontSize: 14, color: '#888', lineHeight: 21},
-  primaryButton: {
-    backgroundColor: '#4f46e5', borderRadius: 12, paddingVertical: 14,
-    alignItems: 'center', marginBottom: 12,
-  },
-  primaryButtonText: {color: '#fff', fontWeight: '700', fontSize: 15},
-  warningButton: {
-    backgroundColor: '#7c2d12', borderRadius: 12, paddingVertical: 14,
-    alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: '#c2410c',
-  },
-  warningButtonText: {color: '#fed7aa', fontWeight: '700', fontSize: 15},
-  ghostButton: {
-    borderRadius: 12, paddingVertical: 14, alignItems: 'center',
-    borderWidth: 1, borderColor: '#2a2a2a', marginTop: 4,
-  },
-  ghostButtonText: {color: '#555', fontWeight: '600', fontSize: 14},
-  countdownCard: {
-    backgroundColor: '#1e1b4b', borderRadius: 16, padding: 20, alignItems: 'center',
-    marginBottom: 12, borderWidth: 1, borderColor: '#4f46e5',
-  },
-  countdownLabel: {fontSize: 13, color: '#a5b4fc', marginBottom: 8},
-  countdownTimer: {fontSize: 48, fontWeight: '800', color: '#fff', fontVariant: ['tabular-nums']},
-  countdownSub: {fontSize: 13, color: '#a5b4fc', marginTop: 6, marginBottom: 16},
-  cancelButton: {backgroundColor: '#2a2a2a', borderRadius: 10, paddingHorizontal: 20, paddingVertical: 10},
-  cancelButtonText: {color: '#fff', fontWeight: '600', fontSize: 14},
-  codeCard: {
-    backgroundColor: '#1c1c1c', borderRadius: 16, padding: 20, alignItems: 'center',
-    marginBottom: 16, borderWidth: 1, borderColor: '#2a2a2a',
-  },
-  codeLabel: {fontSize: 13, color: '#888', marginBottom: 8},
-  codeValue: {fontSize: 36, fontWeight: '800', color: '#fff', letterSpacing: 6, marginBottom: 8},
-  codeCopy: {fontSize: 13, color: '#4f46e5', fontWeight: '600'},
-  connectCard: {
-    backgroundColor: '#1c1c1c', borderRadius: 16, padding: 18, marginBottom: 16,
-    borderWidth: 1, borderColor: '#2a2a2a',
-  },
-  connectTitle: {fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 6},
-  connectSub: {fontSize: 13, color: '#888', lineHeight: 19, marginBottom: 16},
-  codeInput: {
-    backgroundColor: '#0f0f0f', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
-    color: '#fff', fontSize: 18, fontWeight: '700', letterSpacing: 4, borderWidth: 1,
-    borderColor: '#2a2a2a', marginBottom: 12, textAlign: 'center',
-  },
-  devButton: {marginTop: 24, alignItems: 'center', padding: 8},
-  devButtonText: {color: '#333', fontSize: 12},
-});
+function createStyles(c: Colors) {
+  return StyleSheet.create({
+    container: {flex: 1, backgroundColor: c.background},
+    content: {paddingHorizontal: 20, paddingBottom: 40},
+    heading: {fontSize: 28, fontWeight: '800', color: c.text, marginBottom: 4},
+    subheading: {fontSize: 14, color: c.textSecondary, marginBottom: 24},
+    sectionTitle: {fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 14},
+    optionCard: {backgroundColor: c.surface, borderRadius: 16, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: c.border},
+    optionTop: {flexDirection: 'row', alignItems: 'center', marginBottom: 8},
+    optionIcon: {fontSize: 20, marginRight: 10},
+    optionTitle: {fontSize: 16, fontWeight: '700', color: c.text},
+    optionDesc: {fontSize: 14, color: c.textSecondary, lineHeight: 21},
+    statusCard: {borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, backgroundColor: c.surface, borderColor: c.border},
+    statusCardLocked: {backgroundColor: c.cardLocked, borderColor: c.cardLockedBorder},
+    statusCardUnlocked: {backgroundColor: c.surface, borderColor: c.border},
+    statusCardTitle: {fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 6},
+    statusCardSub: {fontSize: 14, color: c.textSecondary, lineHeight: 21},
+    primaryButton: {backgroundColor: c.accent, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 12},
+    primaryButtonText: {color: '#fff', fontWeight: '700', fontSize: 15},
+    warningButton: {backgroundColor: c.dangerBg, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: c.dangerBorder},
+    warningButtonText: {color: c.dangerText, fontWeight: '700', fontSize: 15},
+    ghostButton: {borderRadius: 12, paddingVertical: 14, alignItems: 'center', borderWidth: 1, borderColor: c.border, marginTop: 4},
+    ghostButtonText: {color: c.textMuted, fontWeight: '600', fontSize: 14},
+    countdownCard: {backgroundColor: c.cardLocked, borderRadius: 16, padding: 20, alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: c.cardLockedBorder},
+    countdownLabel: {fontSize: 13, color: c.accentSoft, marginBottom: 8},
+    countdownTimer: {fontSize: 48, fontWeight: '800', color: c.text, fontVariant: ['tabular-nums']},
+    countdownSub: {fontSize: 13, color: c.accentSoft, marginTop: 6, marginBottom: 16},
+    cancelButton: {backgroundColor: c.surfaceSecondary, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 10},
+    cancelButtonText: {color: c.text, fontWeight: '600', fontSize: 14},
+    codeCard: {backgroundColor: c.surface, borderRadius: 16, padding: 20, alignItems: 'center', marginBottom: 16, borderWidth: 1, borderColor: c.border},
+    codeLabel: {fontSize: 13, color: c.textSecondary, marginBottom: 8},
+    codeValue: {fontSize: 36, fontWeight: '800', color: c.text, letterSpacing: 6, marginBottom: 8},
+    codeCopy: {fontSize: 13, color: c.accent, fontWeight: '600'},
+    connectCard: {backgroundColor: c.surface, borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: c.border},
+    connectTitle: {fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 6},
+    connectSub: {fontSize: 13, color: c.textSecondary, lineHeight: 19, marginBottom: 16},
+    codeInput: {backgroundColor: c.inputBg, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: c.text, fontSize: 18, fontWeight: '700', letterSpacing: 4, borderWidth: 1, borderColor: c.border, marginBottom: 12, textAlign: 'center'},
+    historySection: {marginTop: 32, borderTopWidth: 1, borderTopColor: c.border, paddingTop: 20},
+    historySectionTitle: {fontSize: 13, fontWeight: '700', color: c.textMuted, marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1},
+    historyRow: {flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: c.borderSubtle},
+    historyLabel: {fontSize: 14, color: c.textSecondary, flex: 1},
+    historyTime: {fontSize: 13, color: c.textFaint, marginLeft: 12},
+    errorBanner: {backgroundColor: c.dangerBg, borderRadius: 12, padding: 14, marginTop: 16, borderWidth: 1, borderColor: c.dangerBorder},
+    errorBannerText: {color: c.dangerText, fontSize: 13, marginBottom: 8},
+    errorBannerRetry: {color: c.danger, fontWeight: '700', fontSize: 13},
+    devButton: {marginTop: 24, alignItems: 'center', padding: 8},
+    devButtonText: {color: c.textFaint, fontSize: 12},
+  });
+}

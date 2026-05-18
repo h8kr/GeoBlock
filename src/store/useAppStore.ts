@@ -2,13 +2,15 @@ import {useState, useEffect} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import BlockingModule from '../native/BlockingModule';
 import GeofenceModule from '../native/GeofenceModule';
-import type {BlockedApp, LocationRule, SelfLock, LockMode, Partner} from '../types';
+import type {BlockedApp, LocationRule, SelfLock, LockMode, Partner, LockEvent} from '../types';
 
 const STORAGE_KEYS = {
   BLOCKED_APPS: 'geoblock_blocked_apps',
   LOCATION_RULES: 'geoblock_location_rules',
   SELF_LOCK: 'geoblock_self_lock',
   LOCK_MODE: 'geoblock_lock_mode',
+  LOCK_HISTORY: 'geoblock_lock_history',
+  THEME: 'geoblock_theme',
 };
 
 const DEFAULT_SELF_LOCK: SelfLock = {
@@ -23,6 +25,8 @@ export function useAppStore() {
   const [selfLock, setSelfLock] = useState<SelfLock>(DEFAULT_SELF_LOCK);
   const [lockMode, setLockMode] = useState<LockMode>('none');
   const [partner, setPartner] = useState<Partner | null>(null);
+  const [lockHistory, setLockHistory] = useState<LockEvent[]>([]);
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -31,11 +35,13 @@ export function useAppStore() {
 
   async function loadFromStorage() {
     try {
-      const [appsJson, rulesJson, lockJson, modeJson] = await Promise.all([
+      const [appsJson, rulesJson, lockJson, modeJson, historyJson, themeJson] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.BLOCKED_APPS),
         AsyncStorage.getItem(STORAGE_KEYS.LOCATION_RULES),
         AsyncStorage.getItem(STORAGE_KEYS.SELF_LOCK),
         AsyncStorage.getItem(STORAGE_KEYS.LOCK_MODE),
+        AsyncStorage.getItem(STORAGE_KEYS.LOCK_HISTORY),
+        AsyncStorage.getItem(STORAGE_KEYS.THEME),
       ]);
       if (appsJson) {
         const apps: BlockedApp[] = JSON.parse(appsJson);
@@ -45,6 +51,8 @@ export function useAppStore() {
       if (rulesJson) setLocationRules(JSON.parse(rulesJson));
       if (lockJson) setSelfLock(JSON.parse(lockJson));
       if (modeJson) setLockMode(JSON.parse(modeJson));
+      if (historyJson) setLockHistory(JSON.parse(historyJson));
+      if (themeJson) setTheme(JSON.parse(themeJson));
     } finally {
       setIsLoaded(true);
     }
@@ -91,14 +99,25 @@ export function useAppStore() {
     return remaining > 0 ? remaining : 0;
   }
 
+  async function addLockEvent(type: string, label: string) {
+    const event: LockEvent = {id: Date.now().toString(), type, label, timestamp: Date.now()};
+    setLockHistory(prev => {
+      const updated = [event, ...prev].slice(0, 50);
+      AsyncStorage.setItem(STORAGE_KEYS.LOCK_HISTORY, JSON.stringify(updated));
+      return updated;
+    });
+  }
+
   async function requestSelfUnlock() {
     const updated: SelfLock = {...selfLock, unlockRequestedAt: Date.now()};
     await updateSelfLock(updated);
+    await addLockEvent('unlock_requested', 'Unlock countdown started');
   }
 
   async function cancelSelfUnlock() {
     const updated: SelfLock = {...selfLock, unlockRequestedAt: null};
     await updateSelfLock(updated);
+    await addLockEvent('unlock_cancelled', 'Unlock request cancelled');
   }
 
   async function activateSelfLock() {
@@ -108,11 +127,19 @@ export function useAppStore() {
       unlockRequestedAt: null,
     };
     await updateSelfLock(updated);
+    await addLockEvent('self_lock_on', 'Self-lock activated');
+  }
+
+  async function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next);
+    await AsyncStorage.setItem(STORAGE_KEYS.THEME, JSON.stringify(next));
   }
 
   async function devResetLock() {
     await updateSelfLock(DEFAULT_SELF_LOCK);
     await updateLockMode('none');
+    await addLockEvent('dev_reset', 'DEV: All locks reset');
   }
 
   return {
@@ -121,8 +148,12 @@ export function useAppStore() {
     selfLock,
     lockMode,
     partner,
+    lockHistory,
+    theme,
+    toggleTheme,
     isLoaded,
     setPartner,
+    addLockEvent,
     updateBlockedApps,
     updateLocationRules,
     updateSelfLock,

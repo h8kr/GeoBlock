@@ -52,8 +52,14 @@ export type AuthStackParamList = {
 
 export type MainTabParamList = {
   Dashboard: undefined;
-  BlockedApps: undefined;
   ScreenTime: undefined;
   LocationRules: undefined;
   Partner: undefined;
 };
+
+export interface LockEvent {
+  id: string;
+  type: string;
+  label: string;
+  timestamp: number;
+}

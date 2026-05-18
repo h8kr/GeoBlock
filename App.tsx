@@ -1,15 +1,12 @@
 import React, {useState, useEffect} from 'react';
 import {LogBox} from 'react-native';
 
-LogBox.ignoreLogs([
-  'This method is deprecated',
-  'Codegen didn\'t run for',
-]);
+LogBox.ignoreLogs(['Codegen didn\'t run for']);
 import {NavigationContainer} from '@react-navigation/native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {StatusBar, View, ActivityIndicator} from 'react-native';
-import auth from '@react-native-firebase/auth';
+import {getAuth, onAuthStateChanged, signOut} from '@react-native-firebase/auth';
 import {AppContext} from './src/store/AppContext';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import MainNavigator from './src/navigation/MainNavigator';
@@ -17,11 +14,11 @@ import {useAppStore} from './src/store/useAppStore';
 
 export default function App() {
   const [initializing, setInitializing] = useState(true);
-  const [user, setUser] = useState(auth().currentUser);
+  const [user, setUser] = useState(getAuth().currentUser);
   const store = useAppStore();
 
   useEffect(() => {
-    return auth().onAuthStateChanged(u => {
+    return onAuthStateChanged(getAuth(), u => {
       setUser(u);
       setInitializing(false);
     });
@@ -38,8 +35,11 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{flex: 1}}>
       <SafeAreaProvider>
-        <StatusBar barStyle="light-content" backgroundColor="#0f0f0f" />
-        <AppContext.Provider value={{store, onSignOut: () => auth().signOut()}}>
+        <StatusBar
+          barStyle={store.theme === 'light' ? 'dark-content' : 'light-content'}
+          backgroundColor={store.theme === 'light' ? '#f7f7f7' : '#0f0f0f'}
+        />
+        <AppContext.Provider value={{store, onSignOut: () => signOut(getAuth())}}>
           <NavigationContainer>
             {user ? <MainNavigator /> : <AuthNavigator />}
           </NavigationContainer>

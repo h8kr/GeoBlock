@@ -32,40 +32,33 @@
 - [x] Design Firestore data model (`/users/{uid}` with inviteCode, partnerId, isLocking)
 - [x] PartnerService.ts — getOrCreateUserDoc, connectPartner, disconnectPartner, setLocking, subscribeToPartner
 - [x] LockScreen — show invite code, enter partner code, connect flow, real-time partner lock status
-- [ ] **Requires Firestore security rules** — set these in Firebase console before testing:
-  ```
-  rules_version = '2';
-  service cloud.firestore {
-    match /databases/{database}/documents {
-      match /users/{uid} {
-        allow read: if request.auth != null;
-        allow write: if request.auth.uid == uid;
-      }
-    }
-  }
-  ```
-- [ ] Push notifications when partner locks/unlocks you (requires FCM setup)
-- [ ] Show lock/unlock state correctly from MY isLocking field (currently needs partner doc loaded)
+- [x] Firestore security rules set in Firebase console
+- [x] Show lock/unlock state correctly from MY isLocking field — subscribe to own doc for real-time updates
+- [ ] ~~Push notifications when partner locks/unlocks you~~ — skipped; live Firestore subscription covers the use case
 
 ## Before Google Play Store
 
 ### Must fix
-- [ ] Remove the DEV reset button from the Lock screen (it's visible to all users)
-- [ ] Test everything on a real physical Android device (nothing tested off emulator yet)
-- [ ] Verify geofencing works end-to-end on a real device with "Allow all the time" location
-- [ ] App icon — proper icon in all required sizes
-- [ ] Play Store listing — screenshots, description, content rating questionnaire
-- [ ] Privacy policy page — required by Google, especially since the app uses location data and an AccessibilityService
+- [x] DEV reset button hidden behind admin check (only visible to gavrielchaim123@gmail.com)
+- [x] Tab bar icons — replaced emoji with MaterialIcons (@react-native-vector-icons/material-icons)
+- [x] App icon — blue lock + G, all required sizes generated
+- [x] Privacy policy — in-app screen created (accessible from Dashboard); needs to be hosted at a public URL for Play Store submission
+- [x] Firebase error handling — partner mode shows error banner + retry when Firestore is unreachable
+- [x] Accessibility service bypass — Dashboard shows a warning banner with a link to Settings when the service is disabled
+- [ ] **NEEDS YOU — physical device:** Test everything on a real Android device (nothing tested off emulator)
+- [ ] **NEEDS YOU — physical device:** Verify geofencing end-to-end with "Allow all the time" location permission
+- [ ] **NEEDS YOU — Play Store Console:** Screenshots, store listing description, content rating questionnaire
+- [ ] **NEEDS YOU — hosting:** Host privacy-policy content at a public URL (e.g. GitHub Pages) so Play Store has a link to it
 
 ### Accessibility Service approval (the hard one)
-- [ ] Submit a permission declaration form to Google explaining why the app needs AccessibilityService
-- [ ] Record a video demonstrating the exact use case (Google requires this)
+- [ ] **NEEDS YOU:** Submit permission declaration form to Google explaining why the app needs AccessibilityService
+- [ ] **NEEDS YOU:** Record a video demonstrating the exact use case (Google requires this)
 - [ ] Apps that use AccessibilityService for app blocking have been rejected before — be prepared to appeal or find an alternative approach
 
-### Known limitations to fix or disclose
-- [ ] The accessibility service can be disabled by the user from Android Settings, bypassing all blocking — a determined user can always escape
-- [ ] No error handling if Firebase goes down
-- [ ] No offline mode — app requires internet for auth and partner features
+### Known limitations — disclosed
+- [x] Accessibility service bypass — warning shown on Dashboard when service is disabled
+- [x] Firebase offline — error banner shown in partner mode when Firestore is unreachable
+- [ ] No offline mode — app requires internet for auth and partner features (acceptable for v1, disclose in Play Store listing)
 
 ## iOS — Separate major project
 - [ ] iOS has no equivalent to Android's AccessibilityService — app blocking works completely differently on iOS
