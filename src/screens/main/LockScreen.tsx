@@ -11,6 +11,7 @@ import {
   Clipboard,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import MaterialIcons from '@react-native-vector-icons/material-icons';
 import {getAuth} from '@react-native-firebase/auth';
 import {useAppContext} from '../../store/AppContext';
 import {useTheme, Colors} from '../../theme';
@@ -206,31 +207,59 @@ export default function LockScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={[styles.content, {paddingTop: insets.top + 16}]}>
+      contentContainerStyle={[styles.content, {paddingTop: insets.top + 12}]}>
+
+      {/* GeoBlock Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <MaterialIcons name="security" size={20} color={colors.accent} />
+          <Text style={styles.headerLogo}>GeoBlock</Text>
+        </View>
+        <MaterialIcons name="settings" size={22} color={colors.textSecondary} />
+      </View>
+
       <Text style={styles.heading}>Lock Mode</Text>
       <Text style={styles.subheading}>Prevent yourself from disabling your blocks.</Text>
 
       {lockMode === 'none' && (
         <View>
-          <Text style={styles.sectionTitle}>Choose a lock method</Text>
           <TouchableOpacity style={styles.optionCard} onPress={() => handleSelectMode('self')}>
-            <View style={styles.optionTop}>
-              <Text style={styles.optionIcon}>⏱</Text>
-              <Text style={styles.optionTitle}>Self-Lock</Text>
+            <View style={styles.optionCardInner}>
+              <View style={styles.optionLeft}>
+                <View style={styles.optionIconBox}>
+                  <MaterialIcons name="timer" size={22} color="#fff" />
+                </View>
+                <Text style={styles.optionTitle}>Self-Lock</Text>
+                <Text style={styles.optionDesc}>
+                  Lock your settings on this device. If you want to turn off your blocks, you must wait 1 hour after requesting the unlock.
+                </Text>
+                <Text style={styles.optionLink}>Activate protocol &gt;</Text>
+              </View>
+              <MaterialIcons name="timer" size={64} color={colors.border} style={styles.optionGhostIcon} />
             </View>
-            <Text style={styles.optionDesc}>
-              Lock your settings on this device. If you want to turn off your blocks, you must wait 1 hour after requesting the unlock.
-            </Text>
           </TouchableOpacity>
+
           <TouchableOpacity style={styles.optionCard} onPress={() => handleSelectMode('partner')}>
-            <View style={styles.optionTop}>
-              <Text style={styles.optionIcon}>👥</Text>
-              <Text style={styles.optionTitle}>Accountability Partner</Text>
+            <View style={styles.optionCardInner}>
+              <View style={styles.optionLeft}>
+                <View style={styles.optionIconBox}>
+                  <MaterialIcons name="people" size={22} color="#fff" />
+                </View>
+                <Text style={styles.optionTitle}>Accountability Partner</Text>
+                <Text style={styles.optionDesc}>
+                  Connect with a trusted friend. They must approve any changes to your blocking rules via a secure verification code.
+                </Text>
+                <Text style={styles.optionLink}>Setup partner &gt;</Text>
+              </View>
+              <MaterialIcons name="people" size={64} color={colors.border} style={styles.optionGhostIcon} />
             </View>
-            <Text style={styles.optionDesc}>
-              Invite a trusted person. They can lock your settings from their phone so only they can allow changes.
-            </Text>
           </TouchableOpacity>
+
+          {/* Security banner */}
+          <View style={styles.securityBanner}>
+            <View style={styles.securityDot} />
+            <Text style={styles.securityText}>SECURITY PROTOCOL READY</Text>
+          </View>
         </View>
       )}
 
@@ -296,7 +325,7 @@ export default function LockScreen() {
               <TextInput
                 style={styles.codeInput}
                 placeholder="Enter their code"
-                placeholderTextColor="#555"
+                placeholderTextColor={colors.textMuted}
                 autoCapitalize="characters"
                 value={codeInput}
                 onChangeText={setCodeInput}
@@ -393,14 +422,22 @@ function createStyles(c: Colors) {
   return StyleSheet.create({
     container: {flex: 1, backgroundColor: c.background},
     content: {paddingHorizontal: 20, paddingBottom: 40},
+    header: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20},
+    headerLeft: {flexDirection: 'row', alignItems: 'center', gap: 6},
+    headerLogo: {fontSize: 16, fontWeight: '700', color: c.text},
     heading: {fontSize: 28, fontWeight: '800', color: c.text, marginBottom: 4},
     subheading: {fontSize: 14, color: c.textSecondary, marginBottom: 24},
-    sectionTitle: {fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 14},
-    optionCard: {backgroundColor: c.surface, borderRadius: 16, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: c.border},
-    optionTop: {flexDirection: 'row', alignItems: 'center', marginBottom: 8},
-    optionIcon: {fontSize: 20, marginRight: 10},
-    optionTitle: {fontSize: 16, fontWeight: '700', color: c.text},
-    optionDesc: {fontSize: 14, color: c.textSecondary, lineHeight: 21},
+    optionCard: {backgroundColor: c.surface, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: c.border, overflow: 'hidden'},
+    optionCardInner: {flexDirection: 'row', alignItems: 'center', padding: 20},
+    optionLeft: {flex: 1, paddingRight: 12},
+    optionIconBox: {width: 44, height: 44, borderRadius: 12, backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center', marginBottom: 14},
+    optionTitle: {fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 8},
+    optionDesc: {fontSize: 13, color: c.textSecondary, lineHeight: 20, marginBottom: 12},
+    optionLink: {fontSize: 13, fontWeight: '600', color: c.accent},
+    optionGhostIcon: {opacity: 0.15},
+    securityBanner: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderRadius: 14, padding: 18, borderWidth: 1, borderColor: c.border, marginTop: 4},
+    securityDot: {width: 8, height: 8, borderRadius: 4, backgroundColor: c.accent, marginRight: 8},
+    securityText: {fontSize: 12, fontWeight: '700', color: c.textSecondary, letterSpacing: 1.5},
     statusCard: {borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, backgroundColor: c.surface, borderColor: c.border},
     statusCardLocked: {backgroundColor: c.cardLocked, borderColor: c.cardLockedBorder},
     statusCardUnlocked: {backgroundColor: c.surface, borderColor: c.border},
@@ -421,7 +458,7 @@ function createStyles(c: Colors) {
     codeCard: {backgroundColor: c.surface, borderRadius: 16, padding: 20, alignItems: 'center', marginBottom: 16, borderWidth: 1, borderColor: c.border},
     codeLabel: {fontSize: 13, color: c.textSecondary, marginBottom: 8},
     codeValue: {fontSize: 36, fontWeight: '800', color: c.text, letterSpacing: 6, marginBottom: 8},
-    codeCopy: {fontSize: 13, color: c.accent, fontWeight: '600'},
+    codeCopy: {fontSize: 13, fontWeight: '600', color: c.accent},
     connectCard: {backgroundColor: c.surface, borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: c.border},
     connectTitle: {fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 6},
     connectSub: {fontSize: 13, color: c.textSecondary, lineHeight: 19, marginBottom: 16},

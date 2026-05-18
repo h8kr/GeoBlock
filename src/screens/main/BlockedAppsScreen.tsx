@@ -14,7 +14,10 @@ import {useAppContext} from '../../store/AppContext';
 import BlockingModule from '../../native/BlockingModule';
 import InstalledAppsModule, {InstalledApp} from '../../native/InstalledAppsModule';
 import {COMMON_APPS} from '../../store/apps';
+import {darkColors, fonts} from '../../theme';
 import type {BlockedApp} from '../../types';
+
+const c = darkColors;
 
 export default function BlockedAppsScreen() {
   const {store} = useAppContext();
@@ -88,7 +91,7 @@ export default function BlockedAppsScreen() {
       <TextInput
         style={styles.search}
         placeholder="Search apps..."
-        placeholderTextColor="#555"
+        placeholderTextColor={c.textMuted}
         value={search}
         onChangeText={setSearch}
       />
@@ -110,8 +113,8 @@ export default function BlockedAppsScreen() {
               <Switch
                 value={state.isBlocked}
                 onValueChange={() => toggleApp(item)}
-                trackColor={{false: '#2a2a2a', true: '#4f46e5'}}
-                thumbColor={state.isBlocked ? '#fff' : '#888'}
+                trackColor={{false: c.surfaceSecondary, true: c.accent}}
+                thumbColor={state.isBlocked ? '#fff' : c.textMuted}
               />
             </View>
           );
@@ -124,38 +127,39 @@ export default function BlockedAppsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#0f0f0f', paddingHorizontal: 20},
-  heading: {fontSize: 28, fontWeight: '800', color: '#fff', marginBottom: 4},
-  subheading: {fontSize: 14, color: '#888', marginBottom: 16},
+  container: {flex: 1, backgroundColor: c.background, paddingHorizontal: 20},
+  heading: {fontSize: 28, fontWeight: '800', fontFamily: fonts.extrabold, color: c.text, marginBottom: 4},
+  subheading: {fontSize: 14, fontFamily: fonts.regular, color: c.textSecondary, marginBottom: 16},
   warningBanner: {
-    backgroundColor: '#1c1400',
+    backgroundColor: c.warningBg,
     borderRadius: 10,
     padding: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#854d0e',
+    borderColor: c.warningBorder,
   },
-  warningTitle: {color: '#fbbf24', fontSize: 13, fontWeight: '700', marginBottom: 3},
-  warningBody: {color: '#92400e', fontSize: 12, lineHeight: 17},
+  warningTitle: {color: c.warning, fontSize: 13, fontWeight: '700', fontFamily: fonts.bold, marginBottom: 3},
+  warningBody: {color: c.warningText, fontFamily: fonts.regular, fontSize: 12, lineHeight: 17},
   lockedBanner: {
-    backgroundColor: '#3b0000',
+    backgroundColor: c.dangerBg,
     borderRadius: 10,
     padding: 10,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#7f1d1d',
+    borderColor: c.dangerBorder,
   },
-  lockedText: {color: '#fca5a5', fontSize: 13, fontWeight: '600', textAlign: 'center'},
+  lockedText: {color: c.dangerText, fontSize: 13, fontWeight: '600', fontFamily: fonts.semibold, textAlign: 'center'},
   search: {
-    backgroundColor: '#1c1c1c',
+    backgroundColor: c.surface,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 11,
-    color: '#fff',
+    fontFamily: fonts.regular,
+    color: c.text,
     fontSize: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: c.border,
   },
   list: {paddingBottom: 40},
   row: {
@@ -167,14 +171,14 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 12,
-    backgroundColor: '#2a2a2a',
+    backgroundColor: c.surfaceSecondary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 14,
   },
-  appIconText: {fontSize: 18, fontWeight: '700', color: '#fff'},
+  appIconText: {fontSize: 18, fontWeight: '700', fontFamily: fonts.bold, color: c.text},
   appInfo: {flex: 1},
-  appName: {fontSize: 15, fontWeight: '600', color: '#fff'},
-  packageName: {fontSize: 11, color: '#555', marginTop: 2},
-  separator: {height: 1, backgroundColor: '#1c1c1c'},
+  appName: {fontSize: 15, fontWeight: '600', fontFamily: fonts.semibold, color: c.text},
+  packageName: {fontSize: 11, fontFamily: fonts.regular, color: c.textMuted, marginTop: 2},
+  separator: {height: 1, backgroundColor: c.borderSubtle},
 });

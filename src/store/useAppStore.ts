@@ -2,6 +2,7 @@ import {useState, useEffect} from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import BlockingModule from '../native/BlockingModule';
 import GeofenceModule from '../native/GeofenceModule';
+import {COMMON_APPS} from './apps';
 import type {BlockedApp, LocationRule, SelfLock, LockMode, Partner, LockEvent} from '../types';
 
 const STORAGE_KEYS = {
@@ -75,7 +76,10 @@ export function useAppStore() {
       radiusMeters: r.radiusMeters,
       isActive: r.isActive,
       blockedPackages: r.blockedAppIds
-        .map(id => appsToUse.find(a => a.id === id)?.packageName)
+        .map(id =>
+          appsToUse.find(a => a.id === id)?.packageName ??
+          COMMON_APPS.find(a => a.id === id)?.packageName,
+        )
         .filter((p): p is string => !!p),
     }));
     GeofenceModule.updateGeofences(geofenceRules).catch(() => {});

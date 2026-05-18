@@ -1,6 +1,7 @@
 import React, {useState, useEffect, useCallback, useMemo} from 'react';
 import {View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import MaterialIcons from '@react-native-vector-icons/material-icons';
 import UsageStatsModule, {AppUsage} from '../../native/UsageStatsModule';
 import {useTheme, Colors} from '../../theme';
 
@@ -44,9 +45,21 @@ export default function ScreenTimeScreen() {
   }, [period, hasPermission, loadStats]);
 
   const total = usage.reduce((sum, a) => sum + a.minutes, 0);
+  const topApp = usage[0];
+  const socialApps = ['TikTok', 'Instagram', 'Twitter', 'Facebook', 'Snapchat', 'YouTube'];
+  const socialMinutes = usage.filter(a => socialApps.some(s => a.appName.includes(s))).reduce((sum, a) => sum + a.minutes, 0);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={[styles.content, {paddingTop: insets.top + 16}]}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, {paddingTop: insets.top + 12}]}>
+      {/* GeoBlock Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <MaterialIcons name="security" size={20} color={colors.accent} />
+          <Text style={styles.headerLogo}>GeoBlock</Text>
+        </View>
+        <MaterialIcons name="settings" size={22} color={colors.textSecondary} />
+      </View>
+
       <Text style={styles.heading}>Screen Time</Text>
       <Text style={styles.subheading}>See where your time goes.</Text>
 
@@ -66,14 +79,19 @@ export default function ScreenTimeScreen() {
 
       {hasPermission && (
         <>
+          {/* Total card */}
           <View style={styles.totalCard}>
             <Text style={styles.totalLabel}>Total {period === 'today' ? 'today' : 'this week'}</Text>
-            {loading
-              ? <ActivityIndicator color="#fff" style={{marginVertical: 8}} />
-              : <Text style={styles.totalValue}>{formatTime(total)}</Text>}
-            <Text style={styles.totalSub}>Across all apps</Text>
+            <View style={styles.totalValueRow}>
+              {loading
+                ? <ActivityIndicator color="#fff" style={{marginVertical: 8}} />
+                : <Text style={styles.totalValue}>{formatTime(total)}</Text>}
+              <MaterialIcons name="trending-up" size={22} color="rgba(255,255,255,0.6)" style={{marginLeft: 8, marginTop: 4}} />
+            </View>
+            <View style={styles.totalBar} />
           </View>
 
+          {/* Period toggle */}
           <View style={styles.segmentRow}>
             {(['today', 'week'] as Period[]).map(p => (
               <TouchableOpacity key={p} style={[styles.segment, period === p && styles.segmentActive]} onPress={() => setPeriod(p)}>
@@ -89,30 +107,48 @@ export default function ScreenTimeScreen() {
               <Text style={styles.emptyText}>No usage data for this period.</Text>
             </View>
           ) : (
-            <View style={styles.section}>
-              {usage.map((app, i) => {
-                const pct = total > 0 ? Math.round((app.minutes / total) * 100) : 0;
-                return (
-                  <View key={app.packageName}>
-                    {i > 0 && <View style={styles.separator} />}
-                    <View style={styles.appRow}>
-                      <View style={styles.appIcon}>
-                        <Text style={styles.appIconText}>{app.appName[0]}</Text>
-                      </View>
-                      <View style={styles.appInfo}>
-                        <View style={styles.appTopRow}>
-                          <Text style={styles.appName}>{app.appName}</Text>
-                          <Text style={styles.appTime}>{formatTime(app.minutes)}</Text>
+            <>
+              <Text style={styles.sectionTitle}>Top usage</Text>
+              <View style={styles.section}>
+                {usage.map((app, i) => {
+                  const pct = total > 0 ? Math.round((app.minutes / total) * 100) : 0;
+                  return (
+                    <View key={app.packageName}>
+                      {i > 0 && <View style={styles.separator} />}
+                      <View style={styles.appRow}>
+                        <View style={styles.appIcon}>
+                          <Text style={styles.appIconText}>{app.appName[0]}</Text>
                         </View>
-                        <View style={styles.barBg}>
-                          <View style={[styles.barFill, {width: `${pct}%`}]} />
+                        <View style={styles.appInfo}>
+                          <View style={styles.appTopRow}>
+                            <Text style={styles.appName}>{app.appName}</Text>
+                            <Text style={styles.appTime}>{formatTime(app.minutes)}</Text>
+                          </View>
+                          <View style={styles.barBg}>
+                            <View style={[styles.barFill, {width: `${pct}%`}]} />
+                          </View>
                         </View>
                       </View>
                     </View>
+                  );
+                })}
+              </View>
+
+              {/* Usage Insight card */}
+              {socialMinutes > 0 && (
+                <View style={styles.insightCard}>
+                  <View style={styles.insightIcon}>
+                    <MaterialIcons name="lightbulb" size={20} color="#f59e0b" />
                   </View>
-                );
-              })}
-            </View>
+                  <View style={styles.insightContent}>
+                    <Text style={styles.insightTitle}>Usage Insight</Text>
+                    <Text style={styles.insightBody}>
+                      Your social media usage is up today. Consider setting a lock rule for your current location.
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </>
           )}
         </>
       )}
@@ -126,32 +162,42 @@ function createStyles(c: Colors) {
   return StyleSheet.create({
     container: {flex: 1, backgroundColor: c.background},
     content: {paddingHorizontal: 20, paddingBottom: 40},
+    header: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20},
+    headerLeft: {flexDirection: 'row', alignItems: 'center', gap: 6},
+    headerLogo: {fontSize: 16, fontWeight: '700', color: c.text},
     heading: {fontSize: 28, fontWeight: '800', color: c.text, marginBottom: 4},
     subheading: {fontSize: 14, color: c.textSecondary, marginBottom: 20},
     permBanner: {backgroundColor: c.warningBg, borderRadius: 10, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: c.warningBorder},
     permTitle: {color: c.warning, fontSize: 13, fontWeight: '700', marginBottom: 4},
     permBody: {color: c.warningText, fontSize: 12, lineHeight: 18},
-    totalCard: {backgroundColor: c.accent, borderRadius: 16, padding: 22, alignItems: 'center', marginBottom: 20},
-    totalLabel: {fontSize: 13, color: '#a5b4fc', marginBottom: 4},
+    totalCard: {backgroundColor: c.accent, borderRadius: 16, padding: 22, marginBottom: 20},
+    totalLabel: {fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 6},
+    totalValueRow: {flexDirection: 'row', alignItems: 'center', marginBottom: 16},
     totalValue: {fontSize: 44, fontWeight: '800', color: '#fff'},
-    totalSub: {fontSize: 13, color: '#a5b4fc', marginTop: 4},
-    segmentRow: {flexDirection: 'row', backgroundColor: c.surface, borderRadius: 12, padding: 4, marginBottom: 20},
+    totalBar: {height: 3, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 3},
+    segmentRow: {flexDirection: 'row', backgroundColor: c.surface, borderRadius: 12, padding: 4, marginBottom: 24},
     segment: {flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 10},
-    segmentActive: {backgroundColor: c.accent},
-    segmentText: {fontSize: 14, color: c.textSecondary, fontWeight: '600'},
-    segmentTextActive: {color: '#fff'},
-    section: {backgroundColor: c.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: c.border},
-    appRow: {flexDirection: 'row', alignItems: 'center', paddingVertical: 10},
-    appIcon: {width: 38, height: 38, borderRadius: 10, backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center', marginRight: 12},
+    segmentActive: {backgroundColor: c.surfaceSecondary},
+    segmentText: {fontSize: 14, fontWeight: '600', color: c.textSecondary},
+    segmentTextActive: {color: c.text},
+    sectionTitle: {fontSize: 15, fontWeight: '700', color: c.text, marginBottom: 12},
+    section: {backgroundColor: c.surface, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: c.border, marginBottom: 16},
+    appRow: {flexDirection: 'row', alignItems: 'center', paddingVertical: 12},
+    appIcon: {width: 40, height: 40, borderRadius: 10, backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center', marginRight: 12},
     appIconText: {fontSize: 16, fontWeight: '700', color: c.text},
     appInfo: {flex: 1},
-    appTopRow: {flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6},
+    appTopRow: {flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8},
     appName: {fontSize: 14, fontWeight: '600', color: c.text},
     appTime: {fontSize: 14, color: c.textSecondary},
-    barBg: {height: 4, backgroundColor: c.surfaceSecondary, borderRadius: 4},
-    barFill: {height: 4, backgroundColor: c.accent, borderRadius: 4},
+    barBg: {height: 3, backgroundColor: c.surfaceSecondary, borderRadius: 3},
+    barFill: {height: 3, backgroundColor: c.accent, borderRadius: 3},
     separator: {height: 1, backgroundColor: c.border},
     empty: {alignItems: 'center', paddingTop: 40},
     emptyText: {color: c.textMuted, fontSize: 14},
+    insightCard: {flexDirection: 'row', backgroundColor: '#1c1400', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#3d2800', alignItems: 'flex-start'},
+    insightIcon: {width: 36, height: 36, borderRadius: 10, backgroundColor: '#3d2800', justifyContent: 'center', alignItems: 'center', marginRight: 12},
+    insightContent: {flex: 1},
+    insightTitle: {fontSize: 13, fontWeight: '700', color: '#f59e0b', marginBottom: 4},
+    insightBody: {fontSize: 13, color: '#d97706', lineHeight: 19},
   });
 }

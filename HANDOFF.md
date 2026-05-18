@@ -1,101 +1,162 @@
-# GeoBlock — Session Handoff
+# GeoBlock — Project Handoff
 
-## What we are building
-A React Native app (Android + iOS) that blocks distracting apps based on GPS location, tracks screen time, and lets a trusted accountability partner (or a self-lock timer) prevent you from disabling your own rules.
+**Last updated:** May 2026  
+**Repo:** https://github.com/h8kr/GeoBlock  
+**Platform:** Android only (React Native 0.85.3)  
+**Design spec:** `design.md` — read this before touching any UI  
+**Architecture reference:** `CLAUDE.md` — full codebase map, gotchas, conventions
 
-## Current state
-- Full UI is built and running on the Android emulator (Pixel 8 AVD)
-- All 5 screens work: Dashboard, Blocked Apps, Screen Time, Location Rules, Lock Mode
-- Login / Sign Up screens exist but use a **fake bypass** — the button just skips auth, no real Firebase yet
-- Local state (blocked apps, location rules, lock mode) saves to the device via AsyncStorage
-- Code is on GitHub: https://github.com/h8kr/GeoBlock
+---
 
-## What we are doing RIGHT NOW
-**Setting up Firebase authentication.**
+## What This App Does
 
-The user has already:
-- Created a Firebase project called "GeoBlock"
-- Added an Android app with package name `com.geoblock`
-- Downloaded `google-services.json` and placed it in `android/app/`
-- Enabled Email/Password authentication in the Firebase console
+GeoBlock is an Android self-discipline tool. Users create GPS-based location rules ("block Instagram and TikTok when I'm at work"), and the app enforces them automatically in the background using Android's AccessibilityService. To prevent cheating, users can activate a Self-Lock (1-hour unlock delay) or invite an Accountability Partner who controls their settings via Firestore.
 
-**Your next task is to wire up Firebase in the code.**
+---
 
-## Steps to complete Firebase setup
+## Current Feature Status
 
-### 1. Verify google-services.json is in place
-```
-Test-Path "c:\Users\gavri\GeoBlock\android\app\google-services.json"
-```
-Should return True. If not, ask the user to drop the file there.
-
-### 2. Install Firebase npm packages
-```
-cd c:\Users\gavri\GeoBlock
-npm install @react-native-firebase/app @react-native-firebase/auth @react-native-firebase/firestore
-```
-
-### 3. Update android/build.gradle
-Add to the `dependencies` block inside `buildscript`:
-```
-classpath('com.google.gms:google-services:4.4.2')
-```
-
-### 4. Update android/app/build.gradle
-Add at the very bottom:
-```
-apply plugin: 'com.google.gms.google-services'
-```
-
-### 5. Replace fake auth in the code
-- `src/screens/auth/LoginScreen.tsx` — replace the TODO with `auth().signInWithEmailAndPassword(email, password)`
-- `src/screens/auth/SignUpScreen.tsx` — replace the TODO with `auth().createUserWithEmailAndPassword(email, password)` then `updateProfile({displayName: name})`
-- `App.tsx` — replace `useState(false)` with a real `onAuthStateChanged` listener from `@react-native-firebase/auth`
-- Add a sign-out button somewhere (Settings or Dashboard)
-
-### 6. Rebuild the Android app
-```
-cd c:\Users\gavri\GeoBlock\android
-.\gradlew.bat app:installDebug -x lint -PreactNativeDevServerPort=8081
-```
-
-### 7. Start Metro (in a separate terminal)
-```
-cd c:\Users\gavri\GeoBlock
-npx react-native start --reset-cache
-```
-
-### 8. Forward the port
-```
-& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" -s emulator-5554 reverse tcp:8081 tcp:8081
-```
-
-## Known Windows-specific build quirks (already fixed — don't undo these)
-
-| Issue | Fix already in place |
+### ✅ Complete & Working
+| Feature | Where |
 |---|---|
-| Gradle can't download from services.gradle.org | `distributionUrl` in `gradle-wrapper.properties` points to a local zip file |
-| Needs JDK 17 | `gradle.properties` points to `C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot` |
-| AsyncStorage Maven artifact | Added to `android/build.gradle` allprojects as a local repo |
-| react-native-screens src/ broken on Windows | `metro.config.js` has a custom `resolveRequest` redirecting to `lib/commonjs/index.js` |
-| Metro can't connect to emulator | Run `adb reverse tcp:8081 tcp:8081` after every emulator restart |
+| Firebase email/password auth | `LoginScreen.tsx`, `SignUpScreen.tsx`, `App.tsx` |
+| Full UI redesign (all screens) | `src/screens/` — matches `design.md` |
+| App blocking via AccessibilityService | `GeoBlockAccessibilityService.kt`, `BlockedActivity.kt` |
+| GPS geofencing (enter/exit zones) | `GeofenceModule.kt`, `GeofenceTransitionReceiver.kt` |
+| Location rules (create/edit/delete/toggle) | `LocationRulesScreen.tsx` |
+| Map picker for setting rule coordinates | `MapPicker.tsx` (Leaflet in WebView) |
+| App assignment to location rules | Apps modal in `LocationRulesScreen.tsx` |
+| Screen time data (real UsageStats API) | `ScreenTimeScreen.tsx`, `UsageStatsModule.kt` |
+| Installed apps list (native) | `InstalledAppsModule.kt` |
+| Self-lock with 1-hour countdown | `LockScreen.tsx`, `useAppStore.ts` |
+| Accountability partner (Firestore real-time) | `LockScreen.tsx`, `PartnerService.ts` |
+| Partner invite code system | `PartnerService.ts` — Firestore `users/{uid}` collection |
+| Dev test blocking (selectable app) | Admin section in `DashboardScreen.tsx` |
+| AsyncStorage persistence | `useAppStore.ts` — all state survives app restart |
+| Light/dark theme toggle | `src/theme/index.ts`, `useTheme()` |
+| Privacy policy | `PrivacyPolicyScreen.tsx` (modal) |
+| Background location permission flow | `LocationRulesScreen.tsx` |
+| Usage access permission flow | `ScreenTimeScreen.tsx` |
+| `CLAUDE.md` project documentation | Root — keep updated |
+| `.gitignore` (build artifacts excluded) | Root |
 
-## Folder structure
+### ⚠️ Known Issues / Incomplete
+| Issue | Detail |
+|---|---|
+| **Geist fonts not linked** | `src/theme/index.ts` exports font names but TTFs aren't registered with React Native's font system. All `fontFamily` refs silently fall back to system font. To fix: run `npx react-native-asset` after confirming fonts are in `android/app/src/main/assets/fonts/` and `react-native.config.js` lists the asset path. |
+| **`google-services.json` not in repo** | Gitignored intentionally. Every developer must obtain it from Firebase console (GeoBlock project → Android app → download config) and place it at `android/app/google-services.json`. |
+| **Light mode not fully tested** | The theme system supports light mode but screens were designed and tested primarily in dark mode. |
+| **BlockedAppsScreen still uses old font refs** | `BlockedAppsScreen.tsx` still imports and uses `fonts` from theme. Harmless (silent fallback) but inconsistent with other screens. |
+| **iOS not started** | All native modules (`BlockingModule`, `GeofenceModule`, etc.) are Android-only. No iOS implementations exist. |
+
+---
+
+## Architecture in 60 Seconds
+
 ```
-src/
-  screens/
-    auth/         — LoginScreen.tsx, SignUpScreen.tsx
-    main/         — DashboardScreen, BlockedAppsScreen, ScreenTimeScreen,
-                    LocationRulesScreen, LockScreen
-  navigation/     — AuthNavigator.tsx, MainNavigator.tsx
-  store/          — useAppStore.ts (AsyncStorage state)
-  types/          — index.ts
+App.tsx
+ ├── AuthNavigator  →  LoginScreen / SignUpScreen
+ └── MainNavigator (bottom tabs)
+      ├── Dashboard      (tab: "Dashboard",  route: "Dashboard")
+      ├── ScreenTime     (tab: "Limits",     route: "ScreenTime")
+      ├── LocationRules  (tab: "Rules",      route: "LocationRules")
+      └── LockScreen     (tab: "Lock",       route: "Partner")  ← route name is "Partner"
+
+State: useAppStore.ts (custom hook) → AppContext → useAppContext() in all screens
+Persistence: AsyncStorage (all state) + Firestore (partner data only)
+Blocking pipeline:
+  JS: BlockingModule.setBlockedApps([...packageNames])
+    → SharedPrefs "blocked_apps"
+    → GeoBlockAccessibilityService checks on every window change
+  Geofence: GeofenceTransitionReceiver → SharedPrefs "geofence_blocked_apps"
+    → same AccessibilityService check
 ```
 
-## After Firebase — what comes next
-1. Assign apps to a location rule (currently rules are created with no apps attached)
-2. Real GPS coordinates when creating a location rule
-3. Background geofence monitoring service
-4. Native Android AccessibilityService (actual app blocking)
-5. Native Android UsageStatsManager (real screen time data)
-6. Accountability partner invite flow (Firestore)
+Full detail: see `CLAUDE.md`.
+
+---
+
+## Critical Bug Fixed This Session
+
+`useAppStore.ts` → `updateLocationRules()` was resolving `blockedAppIds` (COMMON_APPS string IDs) to package names exclusively through `blockedApps` state. If a user added apps to a location rule without first visiting BlockedAppsScreen, `blockedApps` was empty and geofences silently blocked nothing.
+
+**Fix:** Added `COMMON_APPS` as a direct fallback in the package name lookup. Do not revert this.
+
+```ts
+// in updateLocationRules():
+blockedPackages: r.blockedAppIds.map(id =>
+  appsToUse.find(a => a.id === id)?.packageName ??
+  COMMON_APPS.find(a => a.id === id)?.packageName   // ← this fallback is critical
+).filter(Boolean)
+```
+
+---
+
+## Windows Build Quirks (Do Not Undo)
+
+| Problem | Fix in place |
+|---|---|
+| Gradle can't hit services.gradle.org | `gradle-wrapper.properties` → `distributionUrl` points to a local `.zip` |
+| `react-native-screens` broken on Windows | `metro.config.js` → custom `resolveRequest` redirects to `lib/commonjs/index.js` |
+| AsyncStorage Maven artifact missing | `android/build.gradle` → `allprojects` block has local Maven repo path |
+| Metro can't reach emulator | Run `adb reverse tcp:8081 tcp:8081` after every emulator restart |
+
+---
+
+## Dev Commands
+
+```bash
+npm start                         # Metro bundler
+npm run android                   # Build + install debug APK
+npx react-native start --reset-cache  # Metro with cleared cache
+
+# Manual gradle (if npm run android fails)
+cd android
+.\gradlew.bat app:installDebug -x lint -PreactNativeDevServerPort=8081
+
+# ADB port forward (run after emulator boots)
+adb reverse tcp:8081 tcp:8081
+```
+
+---
+
+## What Comes Next (Priority Order)
+
+### 1. Fix Geist Font Linking
+The fonts are bundled at `android/app/src/main/assets/fonts/` but aren't registered. Add a `react-native.config.js`:
+```js
+module.exports = { assets: ['./android/app/src/main/assets/fonts/'] };
+```
+Then run `npx react-native-asset`. Verify in theme that font names match exactly.
+
+### 2. Real App Blocking from Installed Apps
+`InstalledAppsModule` already returns installed apps. `LocationRulesScreen` currently only shows `COMMON_APPS`. Wire up `InstalledAppsModule.getInstalledApps()` in the apps assignment modal to show the user's actual installed apps as the primary list, falling back to `COMMON_APPS`.
+
+### 3. Notification When Blocked
+When `GeoBlockAccessibilityService` launches `BlockedActivity`, it could also fire a local notification explaining why the app is blocked and showing the active rule name. Android notification channel setup needed.
+
+### 4. Play Store Submission
+See the pre-launch requirements document (separate doc). Key blockers:
+- Privacy policy must be hosted at a real URL (not just the in-app modal)
+- `MANAGE_OVERLAY_PERMISSION` and Accessibility Service usage requires declaration
+- Release keystore must be set up (`android/app/release.keystore`, never commit it)
+
+### 5. iOS Port
+All 4 native modules need iOS implementations. AccessibilityService equivalent on iOS is Screen Time API (heavily restricted by Apple — may require MDM). Requires macOS machine to build.
+
+---
+
+## Key File Locations
+
+| What | Where |
+|---|---|
+| App entry point | `App.tsx` |
+| All types | `src/types/index.ts` |
+| Theme colors + fonts | `src/theme/index.ts` |
+| Pre-built app list | `src/store/apps.ts` |
+| All state + persistence | `src/store/useAppStore.ts` |
+| Firestore partner logic | `src/services/PartnerService.ts` |
+| Android blocking service | `android/app/src/main/java/com/geoblock/GeoBlockAccessibilityService.kt` |
+| Blocked app overlay | `android/app/src/main/java/com/geoblock/BlockedActivity.kt` |
+| Android manifest | `android/app/src/main/AndroidManifest.xml` |
+| Firebase config (gitignored) | `android/app/google-services.json` — get from Firebase console |

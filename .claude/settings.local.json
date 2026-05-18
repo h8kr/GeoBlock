@@ -25,7 +25,15 @@
       "Bash(rm -rf ~/.gradle/caches/9.3.1/ ~/.gradle/caches/8.10.2/ ~/.gradle/wrapper/dists/gradle-9.3.1*)",
       "Bash(adb devices *)",
       "PowerShell(Set-Location \"c:\\\\Users\\\\gavri\\\\GeoBlock\"; Start-Process powershell -ArgumentList \"-NoExit\", \"-Command\", \"cd 'c:\\\\Users\\\\gavri\\\\GeoBlock'; npx react-native start --reset-cache 2>&1\" -WindowStyle Normal; Start-Sleep -Seconds 15; netstat -ano | Select-String \":8081\")",
-      "PowerShell($adb = \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\"; & $adb -s emulator-5554 reverse tcp:8081 tcp:8081; Write-Host \"Forwarded\"; Start-Sleep -Seconds 2; & $adb -s emulator-5554 shell am force-stop com.geoblock; Start-Sleep -Seconds 1; & $adb -s emulator-5554 shell monkey -p com.geoblock 1)"
+      "PowerShell($adb = \"$env:LOCALAPPDATA\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\"; & $adb -s emulator-5554 reverse tcp:8081 tcp:8081; Write-Host \"Forwarded\"; Start-Sleep -Seconds 2; & $adb -s emulator-5554 shell am force-stop com.geoblock; Start-Sleep -Seconds 1; & $adb -s emulator-5554 shell monkey -p com.geoblock 1)",
+      "Bash(claude mcp *)",
+      "Bash(ls \"C:\\\\Users\\\\gavri\\\\.claude\\\\\")",
+      "Read(//c/Users/gavri/**)",
+      "PowerShell(claude mcp list)",
+      "PowerShell(claude mcp get stitch 2>&1)",
+      "WebFetch(domain:stitch.googleapis.com)",
+      "mcp__claude_ai_Google_Drive__search_files",
+      "mcp__claude_ai_Google_Drive__list_recent_files"
     ],
     "additionalDirectories": [
       "C:\\Users\\gavri\\.gradle\\caches\\9.3.1"

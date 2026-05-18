@@ -1,6 +1,7 @@
 import React, {useState, useEffect, useMemo} from 'react';
 import {View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, TextInput, Modal, PermissionsAndroid, ActivityIndicator, FlatList} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import MaterialIcons from '@react-native-vector-icons/material-icons';
 import {useAppContext} from '../../store/AppContext';
 import {useTheme, Colors} from '../../theme';
 import GeofenceModule from '../../native/GeofenceModule';
@@ -30,6 +31,7 @@ export default function LocationRulesScreen() {
   }, []);
 
   const isLocked = (lockMode === 'self' && selfLock.isLocked) || (lockMode === 'partner' && !!partner?.isLockingYou);
+  const activeRules = locationRules.filter(r => r.isActive);
 
   function toggleRule(id: string) {
     if (isLocked) { Alert.alert('Locked', 'Your settings are locked.'); return; }
@@ -88,15 +90,26 @@ export default function LocationRulesScreen() {
   }
 
   return (
-    <View style={[styles.container, {paddingTop: insets.top + 16}]}>
-      <View style={styles.headerRow}>
+    <View style={[styles.container, {paddingTop: insets.top + 12}]}>
+      {/* GeoBlock Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <MaterialIcons name="security" size={20} color={colors.accent} />
+          <Text style={styles.headerLogo}>GeoBlock</Text>
+        </View>
+        <MaterialIcons name="settings" size={22} color={colors.textSecondary} />
+      </View>
+
+      {/* Page heading + Add button */}
+      <View style={styles.titleRow}>
         <View>
           <Text style={styles.heading}>Location Rules</Text>
           <Text style={styles.subheading}>Block apps in specific places.</Text>
         </View>
         {!isLocked && (
           <TouchableOpacity style={styles.addButton} onPress={() => setShowCreateModal(true)}>
-            <Text style={styles.addButtonText}>+ Add</Text>
+            <MaterialIcons name="add" size={16} color="#fff" />
+            <Text style={styles.addButtonText}>Add</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -108,7 +121,7 @@ export default function LocationRulesScreen() {
           setBgLocationGranted(granted);
         }}>
           <Text style={styles.bgWarningTitle}>Background location not enabled</Text>
-          <Text style={styles.bgWarningBody}>Geofences won't trigger unless you set location to "Allow all the time". Tap here, then choose that option.</Text>
+          <Text style={styles.bgWarningBody}>Geofences won't trigger unless you set location to "Allow all the time". Tap here to fix.</Text>
         </TouchableOpacity>
       )}
 
@@ -116,43 +129,88 @@ export default function LocationRulesScreen() {
         {locationRules.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>No location rules yet</Text>
-            <Text style={styles.emptySub}>Add a rule to block certain apps when you arrive at a location — like blocking social media at work or school.</Text>
+            <Text style={styles.emptySub}>Add a rule to block certain apps when you arrive at a location.</Text>
           </View>
         ) : (
           locationRules.map(rule => (
-            <View key={rule.id} style={styles.ruleCard}>
+            <View key={rule.id} style={[styles.ruleCard, rule.isActive && styles.ruleCardActive]}>
+              {/* Name + toggle */}
               <View style={styles.ruleHeader}>
-                <Text style={styles.ruleName}>{rule.name}</Text>
-                <Switch value={rule.isActive} onValueChange={() => toggleRule(rule.id)} trackColor={{false: colors.surfaceSecondary, true: colors.accent}} thumbColor={rule.isActive ? '#fff' : colors.textSecondary} disabled={isLocked} />
+                <View style={styles.ruleNameRow}>
+                  <MaterialIcons name="work" size={18} color={rule.isActive ? colors.accent : colors.textMuted} style={{marginRight: 8}} />
+                  <Text style={styles.ruleName}>{rule.name}</Text>
+                </View>
+                <Switch
+                  value={rule.isActive}
+                  onValueChange={() => toggleRule(rule.id)}
+                  trackColor={{false: colors.surfaceSecondary, true: colors.accent}}
+                  thumbColor="#fff"
+                  disabled={isLocked}
+                />
               </View>
-              <Text style={styles.ruleMeta}>{rule.blockedAppIds.length} app{rule.blockedAppIds.length !== 1 ? 's' : ''} blocked · {rule.radiusMeters}m radius</Text>
-              <Text style={styles.ruleCoords}>{rule.latitude.toFixed(4)}, {rule.longitude.toFixed(4)}</Text>
+
+              {/* Radius */}
+              <View style={styles.radiusRow}>
+                <MaterialIcons name="navigation" size={13} color={colors.textMuted} style={{marginRight: 4}} />
+                <Text style={styles.radiusText}>{rule.radiusMeters}m radius</Text>
+              </View>
+
+              {/* Chips */}
+              <View style={styles.chipRow}>
+                <View style={styles.chip}>
+                  <MaterialIcons name="apps" size={12} color={colors.textSecondary} style={{marginRight: 4}} />
+                  <Text style={styles.chipText}>{rule.blockedAppIds.length} app{rule.blockedAppIds.length !== 1 ? 's' : ''} blocked</Text>
+                </View>
+                <View style={styles.chip}>
+                  <MaterialIcons name="access-time" size={12} color={colors.textSecondary} style={{marginRight: 4}} />
+                  <Text style={styles.chipText}>Always</Text>
+                </View>
+              </View>
+
+              {/* Actions */}
               <View style={styles.ruleActions}>
-                <TouchableOpacity style={styles.assignButton} onPress={() => openAppsModal(rule)}>
-                  <Text style={styles.assignButtonText}>Apps</Text>
+                <TouchableOpacity style={styles.actionBtn} onPress={() => openAppsModal(rule)}>
+                  <MaterialIcons name="apps" size={14} color={colors.textSecondary} style={{marginRight: 4}} />
+                  <Text style={styles.actionBtnText}>Apps</Text>
                 </TouchableOpacity>
                 {!isLocked && (
-                  <TouchableOpacity style={styles.assignButton} onPress={() => openEditModal(rule)}>
-                    <Text style={styles.assignButtonText}>Edit</Text>
+                  <TouchableOpacity style={styles.actionBtn} onPress={() => openEditModal(rule)}>
+                    <MaterialIcons name="edit" size={14} color={colors.textSecondary} style={{marginRight: 4}} />
+                    <Text style={styles.actionBtnText}>Edit</Text>
                   </TouchableOpacity>
                 )}
                 {!isLocked && (
-                  <TouchableOpacity onPress={() => deleteRule(rule.id)}>
-                    <Text style={styles.deleteText}>Remove</Text>
+                  <TouchableOpacity style={styles.trashBtn} onPress={() => deleteRule(rule.id)}>
+                    <MaterialIcons name="delete-outline" size={18} color={colors.danger} />
                   </TouchableOpacity>
                 )}
               </View>
             </View>
           ))
         )}
+
+        {/* Live enforcement map card */}
+        <View style={styles.mapCard}>
+          <View style={styles.mapCardInner}>
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveBadgeText}>LIVE ENFORCEMENT</Text>
+            </View>
+            <View style={styles.mapPinContainer}>
+              <MaterialIcons name="location-on" size={32} color={colors.accent} />
+            </View>
+            <Text style={styles.mapCardTitle}>Current Zone: {activeRules[0]?.name ?? 'None'}</Text>
+          </View>
+        </View>
       </ScrollView>
 
+      {/* Create Modal */}
       <Modal visible={showCreateModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>New Location Rule</Text>
             <TextInput style={styles.input} placeholder="Rule name (e.g. Work, School)" placeholderTextColor={colors.textMuted} value={newName} onChangeText={setNewName} />
-            <Text style={styles.modalNote}>Your current GPS coordinates will be saved as the centre of this rule. Make sure you're at the location now.</Text>
+            <Text style={styles.modalNote}>Your current GPS coordinates will be saved as the centre of this rule.</Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setShowCreateModal(false)}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
@@ -165,6 +223,7 @@ export default function LocationRulesScreen() {
         </View>
       </Modal>
 
+      {/* Edit Modal */}
       <Modal visible={showEditModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -189,6 +248,7 @@ export default function LocationRulesScreen() {
 
       <MapPicker visible={showMapPicker} initialLat={editingRule?.latitude} initialLng={editingRule?.longitude} onConfirm={onMapConfirm} onCancel={() => setShowMapPicker(false)} />
 
+      {/* Apps Modal */}
       <Modal visible={showAppsModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, styles.appsModalCard]}>
@@ -223,24 +283,39 @@ export default function LocationRulesScreen() {
 function createStyles(c: Colors) {
   return StyleSheet.create({
     container: {flex: 1, backgroundColor: c.background, paddingHorizontal: 20},
-    headerRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20},
+    header: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20},
+    headerLeft: {flexDirection: 'row', alignItems: 'center', gap: 6},
+    headerLogo: {fontSize: 16, fontWeight: '700', color: c.text},
+    titleRow: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20},
     heading: {fontSize: 28, fontWeight: '800', color: c.text, marginBottom: 4},
     subheading: {fontSize: 14, color: c.textSecondary},
-    addButton: {backgroundColor: c.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, marginTop: 4},
+    addButton: {flexDirection: 'row', alignItems: 'center', backgroundColor: c.accent, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, gap: 4, marginTop: 4},
     addButtonText: {color: '#fff', fontWeight: '700', fontSize: 14},
     list: {paddingBottom: 40},
     ruleCard: {backgroundColor: c.surface, borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: c.border},
-    ruleHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'},
+    ruleCardActive: {backgroundColor: '#1e1b4b', borderColor: c.accent},
+    ruleHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8},
+    ruleNameRow: {flexDirection: 'row', alignItems: 'center'},
     ruleName: {fontSize: 16, fontWeight: '700', color: c.text},
-    ruleMeta: {fontSize: 13, color: c.textSecondary, marginTop: 6},
-    ruleCoords: {fontSize: 11, color: c.textFaint, marginTop: 2},
-    ruleActions: {flexDirection: 'row', alignItems: 'center', marginTop: 12, gap: 16},
-    assignButton: {backgroundColor: c.surfaceSecondary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: c.border},
-    assignButtonText: {color: c.accent, fontSize: 13, fontWeight: '600'},
-    deleteText: {color: c.danger, fontSize: 13, fontWeight: '600'},
+    radiusRow: {flexDirection: 'row', alignItems: 'center', marginBottom: 10},
+    radiusText: {fontSize: 13, color: c.textSecondary},
+    chipRow: {flexDirection: 'row', gap: 8, marginBottom: 14},
+    chip: {flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceSecondary, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5},
+    chipText: {fontSize: 12, color: c.textSecondary},
+    ruleActions: {flexDirection: 'row', alignItems: 'center', gap: 8},
+    actionBtn: {flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceSecondary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: c.border},
+    actionBtnText: {color: c.textSecondary, fontSize: 13, fontWeight: '600'},
+    trashBtn: {marginLeft: 'auto' as any, padding: 6},
     empty: {alignItems: 'center', paddingTop: 60, paddingHorizontal: 20},
     emptyTitle: {fontSize: 18, fontWeight: '700', color: c.text, marginBottom: 10},
     emptySub: {fontSize: 14, color: c.textMuted, textAlign: 'center', lineHeight: 22},
+    mapCard: {height: 160, backgroundColor: '#0d1117', borderRadius: 16, overflow: 'hidden', marginTop: 4, borderWidth: 1, borderColor: '#1e293b'},
+    mapCardInner: {flex: 1, justifyContent: 'center', alignItems: 'center'},
+    liveBadge: {flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(79,70,229,0.3)', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5, marginBottom: 16},
+    liveDot: {width: 6, height: 6, borderRadius: 3, backgroundColor: c.accent, marginRight: 6},
+    liveBadgeText: {fontSize: 11, fontWeight: '700', color: c.accent, letterSpacing: 1},
+    mapPinContainer: {marginBottom: 8},
+    mapCardTitle: {fontSize: 14, fontWeight: '700', color: '#fff'},
     modalOverlay: {flex: 1, backgroundColor: c.modalOverlay, justifyContent: 'flex-end'},
     modalCard: {backgroundColor: c.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24},
     appsModalCard: {maxHeight: '80%'},
