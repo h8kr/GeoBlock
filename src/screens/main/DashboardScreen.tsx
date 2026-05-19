@@ -1,5 +1,5 @@
 import React, {useState, useEffect, useMemo} from 'react';
-import {View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal} from 'react-native';
+import {View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Alert} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import MaterialIcons from '@react-native-vector-icons/material-icons';
 import {getAuth} from '@react-native-firebase/auth';
@@ -8,6 +8,7 @@ import {useTheme, Colors} from '../../theme';
 import BlockingModule from '../../native/BlockingModule';
 import {COMMON_APPS} from '../../store/apps';
 import PrivacyPolicyScreen from './PrivacyPolicyScreen';
+import SettingsModal from '../../components/SettingsModal';
 
 const ADMIN_EMAIL = 'gavrielchaim123@gmail.com';
 
@@ -47,16 +48,17 @@ function StatusBadge({active, colors}: {active: boolean; colors: Colors}) {
 }
 
 export default function DashboardScreen() {
-  const {store, onSignOut} = useAppContext();
-  const {colors, theme, toggleTheme} = useTheme();
+  const {store} = useAppContext();
+  const {colors} = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const {locationRules, selfLock, lockMode, partner} = store;
+  const {locationRules, selfLock, lockMode, partner, currentZone} = store;
   const [accessibilityEnabled, setAccessibilityEnabled] = useState(true);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [testBlocking, setTestBlocking] = useState(false);
   const [selectedTestApp, setSelectedTestApp] = useState(TEST_APPS[0]);
-  const isAdmin = __DEV__ || getAuth().currentUser?.email === ADMIN_EMAIL;
+  const isAdmin = getAuth().currentUser?.email === ADMIN_EMAIL;
 
   useEffect(() => {
     BlockingModule.isAccessibilityServiceEnabled().then(setAccessibilityEnabled).catch(() => {});
@@ -64,7 +66,12 @@ export default function DashboardScreen() {
 
   const activeRules = locationRules.filter(r => r.isActive);
   const configuredAppCount = new Set(activeRules.flatMap(r => r.blockedAppIds)).size;
-  const isLocked = lockMode !== 'none' && (selfLock.isLocked || !!partner?.isLockingYou);
+  const isLocked = lockMode !== 'none' && (selfLock.isLocked || (!!partner && partner.isLockingYou && partner.blockedPackages.length > 0));
+
+  const zoneTitle = currentZone ? currentZone.name : 'Zone: Unknown';
+  const zoneSub = currentZone
+    ? `${currentZone.radiusMeters}m radius · apps blocked`
+    : 'Not inside any geofenced area';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={[styles.content, {paddingTop: insets.top + 12}]}>
@@ -74,14 +81,9 @@ export default function DashboardScreen() {
           <MaterialIcons name="security" size={20} color={colors.accent} />
           <Text style={styles.headerLogo}>GeoBlock</Text>
         </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity onPress={toggleTheme} style={styles.headerBtn}>
-            <MaterialIcons name={theme === 'dark' ? 'light-mode' : 'dark-mode'} size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onSignOut} style={styles.headerBtn}>
-            <Text style={styles.signOutText}>Sign Out</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={() => setShowSettings(true)} style={styles.headerBtn}>
+          <MaterialIcons name="settings" size={22} color={colors.textSecondary} />
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.heading}>Dashboard</Text>
@@ -94,13 +96,6 @@ export default function DashboardScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>System Status</Text>
-        <View style={styles.statusRow}>
-          <View style={styles.statusLeft}>
-            <MaterialIcons name="security" size={18} color={colors.textSecondary} style={styles.statusIcon} />
-            <Text style={styles.statusLabel}>Blocking Service</Text>
-          </View>
-          <StatusBadge active={accessibilityEnabled} colors={colors} />
-        </View>
         <View style={styles.statusRow}>
           <View style={styles.statusLeft}>
             <MaterialIcons name="location-on" size={18} color={colors.textSecondary} style={styles.statusIcon} />
@@ -144,13 +139,16 @@ export default function DashboardScreen() {
       )}
 
       {/* Enforcement Zone card */}
-      <View style={styles.mapCard}>
+      <View style={[styles.mapCard, currentZone && styles.mapCardActive]}>
         <View style={styles.mapCardOverlay}>
-          <MaterialIcons name="my-location" size={24} color={colors.accent} style={{marginBottom: 8}} />
-          <Text style={styles.mapCardTitle}>Enforcement Zone Active</Text>
-          <Text style={styles.mapCardSub}>
-            {activeRules.length > 0 ? `${activeRules[0].name} · ${activeRules[0].radiusMeters}m radius` : 'No active zone'}
-          </Text>
+          <MaterialIcons
+            name="my-location"
+            size={24}
+            color={currentZone ? colors.accent : colors.textMuted}
+            style={{marginBottom: 8}}
+          />
+          <Text style={styles.mapCardTitle}>{zoneTitle}</Text>
+          <Text style={styles.mapCardSub}>{zoneSub}</Text>
         </View>
       </View>
 
@@ -200,6 +198,8 @@ export default function DashboardScreen() {
       <Modal visible={showPrivacy} animationType="slide">
         <PrivacyPolicyScreen onClose={() => setShowPrivacy(false)} />
       </Modal>
+
+      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
     </ScrollView>
   );
 }
@@ -211,9 +211,7 @@ function createStyles(c: Colors) {
     header: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20},
     headerLeft: {flexDirection: 'row', alignItems: 'center', gap: 6},
     headerLogo: {fontSize: 16, fontWeight: '700', color: c.text},
-    headerRight: {flexDirection: 'row', alignItems: 'center', gap: 4},
     headerBtn: {padding: 6},
-    signOutText: {fontSize: 13, color: c.textSecondary, fontWeight: '600'},
     heading: {fontSize: 28, fontWeight: '800', color: c.text, marginBottom: 4},
     subheading: {fontSize: 14, color: c.textSecondary, marginBottom: 24},
     row: {flexDirection: 'row', gap: 12, marginBottom: 20},
@@ -233,6 +231,7 @@ function createStyles(c: Colors) {
     warningBannerTitle: {fontSize: 14, fontWeight: '700', color: c.warning, marginBottom: 4},
     warningBannerSub: {fontSize: 13, color: c.warningText, lineHeight: 19},
     mapCard: {height: 160, backgroundColor: '#0d1117', borderRadius: 16, overflow: 'hidden', marginBottom: 20, borderWidth: 1, borderColor: '#1e293b', justifyContent: 'center', alignItems: 'center'},
+    mapCardActive: {borderColor: c.accent},
     mapCardOverlay: {alignItems: 'center'},
     mapCardTitle: {fontSize: 15, fontWeight: '700', color: '#fff', marginBottom: 4},
     mapCardSub: {fontSize: 13, color: c.textSecondary},

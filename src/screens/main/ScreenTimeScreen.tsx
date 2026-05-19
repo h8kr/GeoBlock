@@ -4,11 +4,23 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import MaterialIcons from '@react-native-vector-icons/material-icons';
 import UsageStatsModule, {AppUsage} from '../../native/UsageStatsModule';
 import {useTheme, Colors} from '../../theme';
+import {useAppContext} from '../../store/AppContext';
+import SettingsModal from '../../components/SettingsModal';
+import type {BlockingSession} from '../../types';
 
 function formatTime(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function formatMs(ms: number): string {
+  const totalMinutes = Math.floor(ms / 60000);
+  if (totalMinutes < 1) return '<1m';
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
@@ -18,10 +30,13 @@ export default function ScreenTimeScreen() {
   const insets = useSafeAreaInsets();
   const {colors} = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const {store} = useAppContext();
+  const {blockingSessions} = store;
   const [period, setPeriod] = useState<Period>('today');
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [usage, setUsage] = useState<AppUsage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const loadStats = useCallback(async () => {
     setLoading(true);
@@ -45,9 +60,25 @@ export default function ScreenTimeScreen() {
   }, [period, hasPermission, loadStats]);
 
   const total = usage.reduce((sum, a) => sum + a.minutes, 0);
-  const topApp = usage[0];
   const socialApps = ['TikTok', 'Instagram', 'Twitter', 'Facebook', 'Snapchat', 'YouTube'];
   const socialMinutes = usage.filter(a => socialApps.some(s => a.appName.includes(s))).reduce((sum, a) => sum + a.minutes, 0);
+
+  // Time saved calculation
+  const savedByApp = useMemo(() => {
+    const now = Date.now();
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const cutoff = period === 'today' ? startOfDay.getTime() : now - 7 * 24 * 60 * 60 * 1000;
+    const map: Record<string, {appName: string; totalMs: number}> = {};
+    blockingSessions.forEach((s: BlockingSession) => {
+      if (s.endTime < cutoff) return;
+      const start = Math.max(s.startTime, cutoff);
+      const duration = Math.max(0, s.endTime - start);
+      if (!map[s.packageName]) map[s.packageName] = {appName: s.appName, totalMs: 0};
+      map[s.packageName].totalMs += duration;
+    });
+    return Object.values(map).sort((a, b) => b.totalMs - a.totalMs);
+  }, [blockingSessions, period]);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={[styles.content, {paddingTop: insets.top + 12}]}>
@@ -57,7 +88,9 @@ export default function ScreenTimeScreen() {
           <MaterialIcons name="security" size={20} color={colors.accent} />
           <Text style={styles.headerLogo}>GeoBlock</Text>
         </View>
-        <MaterialIcons name="settings" size={22} color={colors.textSecondary} />
+        <TouchableOpacity onPress={() => setShowSettings(true)} style={{padding: 4}}>
+          <MaterialIcons name="settings" size={22} color={colors.textSecondary} />
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.heading}>Screen Time</Text>
@@ -153,7 +186,38 @@ export default function ScreenTimeScreen() {
         </>
       )}
 
+      {/* Time Saved section */}
+      <Text style={[styles.sectionTitle, {marginTop: 24}]}>Time Saved</Text>
+      {savedByApp.length === 0 ? (
+        <View style={styles.savedEmpty}>
+          <MaterialIcons name="shield" size={28} color={colors.textMuted} style={{marginBottom: 8}} />
+          <Text style={styles.savedEmptyText}>
+            No blocking data yet. Enter a geofenced zone to start tracking.
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.section}>
+          {savedByApp.map((item, i) => (
+            <View key={item.appName}>
+              {i > 0 && <View style={styles.separator} />}
+              <View style={styles.savedRow}>
+                <View style={styles.appIcon}>
+                  <Text style={styles.appIconText}>{item.appName[0]}</Text>
+                </View>
+                <Text style={styles.savedAppName}>{item.appName}</Text>
+                <View style={styles.savedBadge}>
+                  <MaterialIcons name="lock" size={12} color={colors.accent} style={{marginRight: 4}} />
+                  <Text style={styles.savedTime}>{formatMs(item.totalMs)}</Text>
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
       {hasPermission === null && <ActivityIndicator color={colors.accent} style={{marginTop: 40}} />}
+
+      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
     </ScrollView>
   );
 }
@@ -194,10 +258,16 @@ function createStyles(c: Colors) {
     separator: {height: 1, backgroundColor: c.border},
     empty: {alignItems: 'center', paddingTop: 40},
     emptyText: {color: c.textMuted, fontSize: 14},
-    insightCard: {flexDirection: 'row', backgroundColor: '#1c1400', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#3d2800', alignItems: 'flex-start'},
+    insightCard: {flexDirection: 'row', backgroundColor: '#1c1400', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#3d2800', alignItems: 'flex-start', marginBottom: 4},
     insightIcon: {width: 36, height: 36, borderRadius: 10, backgroundColor: '#3d2800', justifyContent: 'center', alignItems: 'center', marginRight: 12},
     insightContent: {flex: 1},
     insightTitle: {fontSize: 13, fontWeight: '700', color: '#f59e0b', marginBottom: 4},
     insightBody: {fontSize: 13, color: '#d97706', lineHeight: 19},
+    savedEmpty: {backgroundColor: c.surface, borderRadius: 16, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: c.border, marginBottom: 16},
+    savedEmptyText: {fontSize: 13, color: c.textMuted, textAlign: 'center', lineHeight: 20},
+    savedRow: {flexDirection: 'row', alignItems: 'center', paddingVertical: 12},
+    savedAppName: {flex: 1, fontSize: 14, fontWeight: '600', color: c.text},
+    savedBadge: {flexDirection: 'row', alignItems: 'center', backgroundColor: c.accent + '20', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5},
+    savedTime: {fontSize: 13, fontWeight: '700', color: c.accent},
   });
 }

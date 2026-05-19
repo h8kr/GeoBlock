@@ -14,6 +14,7 @@ export interface GeofenceRule {
   radiusMeters: number;
   isActive: boolean;
   blockedPackages: string[];
+  schedule?: {days: number[]; startTime: string; endTime: string};
 }
 
 export default {

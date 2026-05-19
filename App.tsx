@@ -15,7 +15,7 @@ import {useAppStore} from './src/store/useAppStore';
 export default function App() {
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState(getAuth().currentUser);
-  const store = useAppStore();
+  const store = useAppStore(user?.uid);
 
   useEffect(() => {
     return onAuthStateChanged(getAuth(), u => {

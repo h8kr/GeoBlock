@@ -7,7 +7,15 @@ import {useTheme, Colors} from '../../theme';
 import GeofenceModule from '../../native/GeofenceModule';
 import {COMMON_APPS} from '../../store/apps';
 import MapPicker from '../../components/MapPicker';
-import type {LocationRule} from '../../types';
+import SettingsModal from '../../components/SettingsModal';
+import type {LocationRule, BlockSchedule} from '../../types';
+
+const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+function formatScheduleChip(schedule: BlockSchedule): string {
+  const selected = schedule.days.slice().sort().map(d => DAY_LABELS[d]);
+  return `${selected.join('/')} ${schedule.startTime}–${schedule.endTime}`;
+}
 
 export default function LocationRulesScreen() {
   const {store} = useAppContext();
@@ -25,6 +33,13 @@ export default function LocationRulesScreen() {
   const [locating, setLocating] = useState(false);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [bgLocationGranted, setBgLocationGranted] = useState<boolean | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+
+  // Schedule edit state
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [editScheduleDays, setEditScheduleDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [editScheduleStart, setEditScheduleStart] = useState('09:00');
+  const [editScheduleEnd, setEditScheduleEnd] = useState('17:00');
 
   useEffect(() => {
     PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.ACCESS_BACKGROUND_LOCATION).then(setBgLocationGranted);
@@ -46,7 +61,17 @@ export default function LocationRulesScreen() {
   }
 
   function openAppsModal(rule: LocationRule) { setEditingRule(rule); setShowAppsModal(true); }
-  function openEditModal(rule: LocationRule) { setEditingRule(rule); setEditName(rule.name); setEditRadius(String(rule.radiusMeters)); setShowEditModal(true); }
+
+  function openEditModal(rule: LocationRule) {
+    setEditingRule(rule);
+    setEditName(rule.name);
+    setEditRadius(String(rule.radiusMeters));
+    setScheduleEnabled(!!rule.schedule);
+    setEditScheduleDays(rule.schedule?.days ?? [1, 2, 3, 4, 5]);
+    setEditScheduleStart(rule.schedule?.startTime ?? '09:00');
+    setEditScheduleEnd(rule.schedule?.endTime ?? '17:00');
+    setShowEditModal(true);
+  }
 
   function onMapConfirm(lat: number, lng: number) {
     if (!editingRule) return;
@@ -56,10 +81,25 @@ export default function LocationRulesScreen() {
     setShowMapPicker(false);
   }
 
+  function toggleScheduleDay(day: number) {
+    setEditScheduleDays(prev =>
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day],
+    );
+  }
+
   function saveEditModal() {
     if (!editingRule) return;
     const radius = parseInt(editRadius, 10);
-    const updated = {...editingRule, name: editName.trim() || editingRule.name, radiusMeters: isNaN(radius) || radius < 50 ? editingRule.radiusMeters : radius};
+    const schedule: BlockSchedule | undefined =
+      scheduleEnabled && editScheduleDays.length > 0
+        ? {days: editScheduleDays, startTime: editScheduleStart, endTime: editScheduleEnd}
+        : undefined;
+    const updated = {
+      ...editingRule,
+      name: editName.trim() || editingRule.name,
+      radiusMeters: isNaN(radius) || radius < 50 ? editingRule.radiusMeters : radius,
+      schedule,
+    };
     updateLocationRules(locationRules.map(r => (r.id === updated.id ? updated : r)));
     setShowEditModal(false);
   }
@@ -97,7 +137,9 @@ export default function LocationRulesScreen() {
           <MaterialIcons name="security" size={20} color={colors.accent} />
           <Text style={styles.headerLogo}>GeoBlock</Text>
         </View>
-        <MaterialIcons name="settings" size={22} color={colors.textSecondary} />
+        <TouchableOpacity onPress={() => setShowSettings(true)} style={{padding: 4}}>
+          <MaterialIcons name="settings" size={22} color={colors.textSecondary} />
+        </TouchableOpacity>
       </View>
 
       {/* Page heading + Add button */}
@@ -163,7 +205,7 @@ export default function LocationRulesScreen() {
                 </View>
                 <View style={styles.chip}>
                   <MaterialIcons name="access-time" size={12} color={colors.textSecondary} style={{marginRight: 4}} />
-                  <Text style={styles.chipText}>Always</Text>
+                  <Text style={styles.chipText}>{rule.schedule ? formatScheduleChip(rule.schedule) : 'Always'}</Text>
                 </View>
               </View>
 
@@ -225,7 +267,7 @@ export default function LocationRulesScreen() {
 
       {/* Edit Modal */}
       <Modal visible={showEditModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <ScrollView contentContainerStyle={styles.modalOverlay} keyboardShouldPersistTaps="handled">
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Edit Rule</Text>
             <TextInput style={styles.input} placeholder="Rule name" placeholderTextColor={colors.textMuted} value={editName} onChangeText={setEditName} />
@@ -234,6 +276,61 @@ export default function LocationRulesScreen() {
             <TouchableOpacity style={styles.locationButton} onPress={() => setShowMapPicker(true)}>
               <Text style={styles.locationButtonText}>🗺️ Set on Map</Text>
             </TouchableOpacity>
+
+            {/* Schedule section */}
+            <View style={styles.scheduleHeader}>
+              <Text style={styles.scheduleLabel}>Time Schedule</Text>
+              <Switch
+                value={scheduleEnabled}
+                onValueChange={setScheduleEnabled}
+                trackColor={{false: colors.surfaceSecondary, true: colors.accent}}
+                thumbColor="#fff"
+              />
+            </View>
+            {scheduleEnabled && (
+              <View style={styles.scheduleBody}>
+                <View style={styles.dayRow}>
+                  {DAY_LABELS.map((label, idx) => (
+                    <TouchableOpacity
+                      key={idx}
+                      style={[styles.dayChip, editScheduleDays.includes(idx) && styles.dayChipActive]}
+                      onPress={() => toggleScheduleDay(idx)}>
+                      <Text style={[styles.dayChipText, editScheduleDays.includes(idx) && styles.dayChipTextActive]}>
+                        {label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <View style={styles.timeRow}>
+                  <View style={styles.timeField}>
+                    <Text style={styles.timeFieldLabel}>From</Text>
+                    <TextInput
+                      style={styles.timeInput}
+                      value={editScheduleStart}
+                      onChangeText={setEditScheduleStart}
+                      placeholder="09:00"
+                      placeholderTextColor={colors.textMuted}
+                      keyboardType="numeric"
+                      maxLength={5}
+                    />
+                  </View>
+                  <Text style={styles.timeSep}>–</Text>
+                  <View style={styles.timeField}>
+                    <Text style={styles.timeFieldLabel}>To</Text>
+                    <TextInput
+                      style={styles.timeInput}
+                      value={editScheduleEnd}
+                      onChangeText={setEditScheduleEnd}
+                      placeholder="17:00"
+                      placeholderTextColor={colors.textMuted}
+                      keyboardType="numeric"
+                      maxLength={5}
+                    />
+                  </View>
+                </View>
+              </View>
+            )}
+
             <View style={[styles.modalButtons, {marginTop: 12}]}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setShowEditModal(false)}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
@@ -243,7 +340,7 @@ export default function LocationRulesScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </ScrollView>
       </Modal>
 
       <MapPicker visible={showMapPicker} initialLat={editingRule?.latitude} initialLng={editingRule?.longitude} onConfirm={onMapConfirm} onCancel={() => setShowMapPicker(false)} />
@@ -276,6 +373,8 @@ export default function LocationRulesScreen() {
           </View>
         </View>
       </Modal>
+
+      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
     </View>
   );
 }
@@ -316,7 +415,7 @@ function createStyles(c: Colors) {
     liveBadgeText: {fontSize: 11, fontWeight: '700', color: c.accent, letterSpacing: 1},
     mapPinContainer: {marginBottom: 8},
     mapCardTitle: {fontSize: 14, fontWeight: '700', color: '#fff'},
-    modalOverlay: {flex: 1, backgroundColor: c.modalOverlay, justifyContent: 'flex-end'},
+    modalOverlay: {flexGrow: 1, backgroundColor: c.modalOverlay, justifyContent: 'flex-end'},
     modalCard: {backgroundColor: c.surface, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24},
     appsModalCard: {maxHeight: '80%'},
     modalTitle: {fontSize: 18, fontWeight: '700', color: c.text, marginBottom: 12},
@@ -337,7 +436,20 @@ function createStyles(c: Colors) {
     bgWarningTitle: {color: c.warning, fontSize: 13, fontWeight: '700', marginBottom: 3},
     bgWarningBody: {color: c.warningText, fontSize: 12, lineHeight: 17},
     coordsDisplay: {fontSize: 12, color: c.textMuted, textAlign: 'center', marginBottom: 12},
-    locationButton: {backgroundColor: c.locationButton, borderRadius: 12, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: c.locationButtonBorder},
+    locationButton: {backgroundColor: c.locationButton, borderRadius: 12, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: c.locationButtonBorder, marginBottom: 16},
     locationButtonText: {color: c.locationButtonText, fontWeight: '600', fontSize: 14},
+    scheduleHeader: {flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8},
+    scheduleLabel: {fontSize: 14, fontWeight: '600', color: c.text},
+    scheduleBody: {backgroundColor: c.inputBg, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: c.border},
+    dayRow: {flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14},
+    dayChip: {width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border},
+    dayChipActive: {backgroundColor: c.accent, borderColor: c.accent},
+    dayChipText: {fontSize: 11, fontWeight: '700', color: c.textSecondary},
+    dayChipTextActive: {color: '#fff'},
+    timeRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+    timeField: {flex: 1},
+    timeFieldLabel: {fontSize: 12, color: c.textMuted, marginBottom: 6},
+    timeInput: {backgroundColor: c.surface, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, color: c.text, fontSize: 16, fontWeight: '700', borderWidth: 1, borderColor: c.border, textAlign: 'center'},
+    timeSep: {fontSize: 18, color: c.textMuted, marginTop: 20},
   });
 }

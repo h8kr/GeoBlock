@@ -42,9 +42,9 @@ export default function MainNavigator() {
         tabBarLabelStyle: {fontSize: 11, fontFamily: fonts.semibold},
       })}>
       <Tab.Screen name="Dashboard" component={DashboardScreen} options={{tabBarLabel: 'Dashboard'}} />
-      <Tab.Screen name="ScreenTime" component={ScreenTimeScreen} options={{tabBarLabel: 'Limits'}} />
       <Tab.Screen name="LocationRules" component={LocationRulesScreen} options={{tabBarLabel: 'Rules'}} />
       <Tab.Screen name="Partner" component={LockScreen} options={{tabBarLabel: 'Lock'}} />
+      <Tab.Screen name="ScreenTime" component={ScreenTimeScreen} options={{tabBarLabel: 'Limits'}} />
     </Tab.Navigator>
   );
 }

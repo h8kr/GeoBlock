@@ -8,6 +8,12 @@ export interface BlockedApp {
   isBlocked: boolean;
 }
 
+export interface BlockSchedule {
+  days: number[];       // 0=Sun 1=Mon … 6=Sat
+  startTime: string;    // "HH:MM" 24h
+  endTime: string;      // "HH:MM" 24h
+}
+
 export interface LocationRule {
   id: string;
   name: string;
@@ -16,6 +22,17 @@ export interface LocationRule {
   radiusMeters: number;
   blockedAppIds: string[];
   isActive: boolean;
+  schedule?: BlockSchedule;
+}
+
+export interface BlockingSession {
+  id: string;
+  packageName: string;
+  appName: string;
+  zoneId: string;
+  zoneName: string;
+  startTime: number;
+  endTime: number;
 }
 
 export interface SelfLock {
@@ -29,6 +46,7 @@ export interface Partner {
   displayName: string;
   email: string;
   isLockingYou: boolean;
+  blockedPackages: string[]; // packages your partner chose to block on YOUR device
 }
 
 export interface User {

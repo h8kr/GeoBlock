@@ -29,10 +29,11 @@ GeoBlock is an Android self-discipline tool. Users create GPS-based location rul
 | Screen time data (real UsageStats API) | `ScreenTimeScreen.tsx`, `UsageStatsModule.kt` |
 | Installed apps list (native) | `InstalledAppsModule.kt` |
 | Self-lock with 1-hour countdown | `LockScreen.tsx`, `useAppStore.ts` |
-| Accountability partner (Firestore real-time) | `LockScreen.tsx`, `PartnerService.ts` |
+| Accountability partner app selector | `LockScreen.tsx`, `PartnerService.ts` — Select real apps to block |
 | Partner invite code system | `PartnerService.ts` — Firestore `users/{uid}` collection |
 | Dev test blocking (selectable app) | Admin section in `DashboardScreen.tsx` |
-| AsyncStorage persistence | `useAppStore.ts` — all state survives app restart |
+| User-Namespaced AsyncStorage | `useAppStore.ts` — state namespaced by UID to prevent cross-account leak |
+| Global Always-On Partner Blocks | `useAppStore.ts` — Partner blocks merged & pushed to native service immediately |
 | Light/dark theme toggle | `src/theme/index.ts`, `useTheme()` |
 | Privacy policy | `PrivacyPolicyScreen.tsx` (modal) |
 | Background location permission flow | `LocationRulesScreen.tsx` |
@@ -65,7 +66,8 @@ App.tsx
 State: useAppStore.ts (custom hook) → AppContext → useAppContext() in all screens
 Persistence: AsyncStorage (all state) + Firestore (partner data only)
 Blocking pipeline:
-  JS: BlockingModule.setBlockedApps([...packageNames])
+  JS: useAppStore.ts useEffect combines user blocked apps + partner's packages
+    → BlockingModule.setBlockedApps([...combinedPackages])
     → SharedPrefs "blocked_apps"
     → GeoBlockAccessibilityService checks on every window change
   Geofence: GeofenceTransitionReceiver → SharedPrefs "geofence_blocked_apps"
@@ -76,19 +78,25 @@ Full detail: see `CLAUDE.md`.
 
 ---
 
-## Critical Bug Fixed This Session
+## Critical Bug Fixes & Refactors This Session
 
-`useAppStore.ts` → `updateLocationRules()` was resolving `blockedAppIds` (COMMON_APPS string IDs) to package names exclusively through `blockedApps` state. If a user added apps to a location rule without first visiting BlockedAppsScreen, `blockedApps` was empty and geofences silently blocked nothing.
+### 1. User-Namespaced AsyncStorage
+Previously, user configurations (rules, blocked apps, locks) were stored globally in AsyncStorage. This caused data leakage when signing in with a different account.
+**Fix:** Refactored `useAppStore.ts` to prepend the authenticated user's `uid` to all storage keys. State is properly wiped/restored on sign-out/sign-in.
 
-**Fix:** Added `COMMON_APPS` as a direct fallback in the package name lookup. Do not revert this.
+### 2. Firestore Modular API exists Method Bug
+In `@react-native-firebase/firestore` v24, `exists` is a method (`snap.exists()`) rather than a property (`snap.exists`). The old code used it as a property, causing the check to always evaluate as truthy and skip document creation, leading to `undefined` errors.
+**Fix:** Implemented a wrapper `snapExists(snap)` in `PartnerService.ts` that safely handles both property and method forms.
 
-```ts
-// in updateLocationRules():
-blockedPackages: r.blockedAppIds.map(id =>
-  appsToUse.find(a => a.id === id)?.packageName ??
-  COMMON_APPS.find(a => a.id === id)?.packageName   // ← this fallback is critical
-).filter(Boolean)
-```
+### 3. Screen Freeze on Network Timeout
+If Firestore was unreachable, the Lock tab would spin infinitely without user-facing errors.
+**Fix:** Implemented a 10-second request timeout in `LockScreen.tsx` that triggers a friendly red error banner with a manual retry button.
+
+### 4. Interactive Partner App Selection
+We completely revamped the Accountability Partner feature. Instead of a basic locking switch, partners can now selectively choose which apps to block on each other's devices.
+- **Dynamic App Sync:** The app retrieves the actual installed apps on the device using `InstalledAppsModule` and syncs them to the user's Firestore document.
+- **Cross-device App Choice:** The partner's device fetches the actual installed apps list of the other user and displays it in a clean selection modal on `LockScreen.tsx`.
+- **Always-on Enforced Blocking:** Blocks are combined automatically inside `useAppStore.ts` and pushed to native SharedPreferences. They are fully active even if the app is closed, restarted, or offline.
 
 ---
 
@@ -129,20 +137,17 @@ module.exports = { assets: ['./android/app/src/main/assets/fonts/'] };
 ```
 Then run `npx react-native-asset`. Verify in theme that font names match exactly.
 
-### 2. Real App Blocking from Installed Apps
-`InstalledAppsModule` already returns installed apps. `LocationRulesScreen` currently only shows `COMMON_APPS`. Wire up `InstalledAppsModule.getInstalledApps()` in the apps assignment modal to show the user's actual installed apps as the primary list, falling back to `COMMON_APPS`.
-
-### 3. Notification When Blocked
+### 2. Notification When Blocked
 When `GeoBlockAccessibilityService` launches `BlockedActivity`, it could also fire a local notification explaining why the app is blocked and showing the active rule name. Android notification channel setup needed.
 
-### 4. Play Store Submission
+### 3. Play Store Submission
 See the pre-launch requirements document (separate doc). Key blockers:
 - Privacy policy must be hosted at a real URL (not just the in-app modal)
 - `MANAGE_OVERLAY_PERMISSION` and Accessibility Service usage requires declaration
 - Release keystore must be set up (`android/app/release.keystore`, never commit it)
 
-### 5. iOS Port
-All 4 native modules need iOS implementations. AccessibilityService equivalent on iOS is Screen Time API (heavily restricted by Apple — may require MDM). Requires macOS machine to build.
+### 4. iOS Port
+All native modules need iOS implementations. AccessibilityService equivalent on iOS is Screen Time API (heavily restricted by Apple — may require MDM). Requires macOS machine to build.
 
 ---
 

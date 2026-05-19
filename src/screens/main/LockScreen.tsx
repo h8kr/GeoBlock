@@ -19,10 +19,11 @@ import {
   getOrCreateUserDoc,
   connectPartner,
   disconnectPartner,
-  setLocking,
+  setPartnerBlockedApps,
   subscribeToPartner,
   UserDoc,
 } from '../../services/PartnerService';
+import SettingsModal from '../../components/SettingsModal';
 
 function formatAge(timestamp: number): string {
   const diff = Date.now() - timestamp;
@@ -51,13 +52,17 @@ export default function LockScreen() {
   const {lockMode, selfLock, partner, lockHistory, updateLockMode, activateSelfLock, requestSelfUnlock, cancelSelfUnlock, getUnlockCountdownMs, devResetLock, setPartner, addLockEvent} = store;
   const isAdmin = getAuth().currentUser?.email === 'gavrielchaim123@gmail.com';
   const [countdown, setCountdown] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   // Partner mode state
   const [myDoc, setMyDoc] = useState<UserDoc | null>(null);
   const [partnerDoc, setPartnerDoc] = useState<UserDoc | null>(null);
   const [codeInput, setCodeInput] = useState('');
   const [loadingPartner, setLoadingPartner] = useState(false);
-  const [firestoreError, setFirestoreError] = useState(false);
+  const [firestoreError, setFirestoreError] = useState<string | false>(false);
+  const [selectedApps, setSelectedApps] = useState<string[]>([]);
+  const [savingApps, setSavingApps] = useState(false);
   const unsubRef = useRef<(() => void) | null>(null);
   const myUnsubRef = useRef<(() => void) | null>(null);
   const prevPartnerLocking = useRef<boolean | undefined>(undefined);
@@ -80,17 +85,31 @@ export default function LockScreen() {
   // Load partner data when in partner mode
   useEffect(() => {
     if (lockMode !== 'partner') return;
-    const uid = auth().currentUser?.uid;
+    const uid = getAuth().currentUser?.uid;
     if (!uid) return;
+    setFirestoreError(false);
+    setMyDoc(null);
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      setFirestoreError('Connection timed out after 10 seconds');
+    }, 10000);
     getOrCreateUserDoc().then(doc => {
+      clearTimeout(timeout);
+      if (timedOut) return;
       setFirestoreError(false);
       setMyDoc(doc);
+      setSelectedApps(doc.partnerBlockedPackages || []);
       myUnsubRef.current?.();
       myUnsubRef.current = subscribeToPartner(uid, updated => setMyDoc(updated));
       if (doc.partnerId) {
         subscribeToPartnerDoc(doc.partnerId);
       }
-    }).catch(() => setFirestoreError(true));
+    }).catch((e: any) => {
+      clearTimeout(timeout);
+      setFirestoreError(e?.message || e?.toString() || 'Unknown Firestore error');
+    });
+    return () => clearTimeout(timeout);
   }, [lockMode]);
 
   function subscribeToPartnerDoc(partnerId: string) {
@@ -104,7 +123,7 @@ export default function LockScreen() {
       }
       prevPartnerLocking.current = doc.isLocking;
       setPartnerDoc(doc);
-      setPartner({uid: partnerId, displayName: doc.displayName, email: doc.email, isLockingYou: doc.isLocking});
+      setPartner({uid: partnerId, displayName: doc.displayName, email: doc.email, isLockingYou: doc.isLocking, blockedPackages: doc.partnerBlockedPackages || []});
     });
   }
 
@@ -144,12 +163,29 @@ export default function LockScreen() {
     ]);
   }
 
-  async function handleToggleLock() {
-    const nowLocking = !myDoc?.isLocking;
+  function toggleAppSelection(packageName: string) {
+    setSelectedApps(prev =>
+      prev.includes(packageName)
+        ? prev.filter(p => p !== packageName)
+        : [...prev, packageName],
+    );
+  }
+
+  async function handleSavePartnerApps() {
+    if (!myDoc?.partnerId) return;
+    setSavingApps(true);
     try {
-      await setLocking(nowLocking);
+      await setPartnerBlockedApps(myDoc.partnerId, selectedApps);
+      addLockEvent(
+        selectedApps.length > 0 ? 'partner_apps_set' : 'partner_apps_cleared',
+        selectedApps.length > 0
+          ? `Blocking ${selectedApps.length} app(s) on partner's device`
+          : "Cleared all blocks on partner's device",
+      );
     } catch (e: any) {
       Alert.alert('Error', e.message);
+    } finally {
+      setSavingApps(false);
     }
   }
 
@@ -215,7 +251,9 @@ export default function LockScreen() {
           <MaterialIcons name="security" size={20} color={colors.accent} />
           <Text style={styles.headerLogo}>GeoBlock</Text>
         </View>
-        <MaterialIcons name="settings" size={22} color={colors.textSecondary} />
+        <TouchableOpacity onPress={() => setShowSettings(true)} style={{padding: 4}}>
+          <MaterialIcons name="settings" size={22} color={colors.textSecondary} />
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.heading}>Lock Mode</Text>
@@ -255,11 +293,6 @@ export default function LockScreen() {
             </View>
           </TouchableOpacity>
 
-          {/* Security banner */}
-          <View style={styles.securityBanner}>
-            <View style={styles.securityDot} />
-            <Text style={styles.securityText}>SECURITY PROTOCOL READY</Text>
-          </View>
         </View>
       )}
 
@@ -342,30 +375,61 @@ export default function LockScreen() {
           )}
 
           {/* Connected */}
-          {myDoc?.partnerId && partnerDoc && (
+          {myDoc?.partnerId && partnerDoc && (() => {
+            const installedApps = partnerDoc.installedApps ?? [];
+            return (
             <View>
               <View style={styles.statusCard}>
                 <Text style={styles.statusCardTitle}>Partner: {partnerDoc.displayName || partnerDoc.email}</Text>
                 <Text style={styles.statusCardSub}>
-                  {partnerDoc.isLocking
-                    ? '🔒 Your partner is currently locking your settings.'
-                    : '🔓 Your partner is not locking your settings right now.'}
+                  {(partner?.blockedPackages?.length ?? 0) > 0
+                    ? `🔒 Your partner is blocking ${partner!.blockedPackages.length} app(s) on your device.`
+                    : '🔓 Your partner is not blocking any apps on your device.'}
                 </Text>
               </View>
 
               <View style={styles.statusCard}>
-                <Text style={styles.statusCardTitle}>Lock your partner</Text>
+                <Text style={styles.statusCardTitle}>Block apps on {partnerDoc.displayName || 'partner'}'s device</Text>
                 <Text style={styles.statusCardSub}>
-                  When you lock your partner, they cannot change their blocked apps until you unlock them.
+                  Select which apps to block. These will be enforced on their device immediately.
                 </Text>
-                <TouchableOpacity
-                  style={[myDoc?.isLocking ? styles.warningButton : styles.primaryButton, {marginTop: 12}]}
-                  onPress={handleToggleLock}>
-                  <Text style={myDoc?.isLocking ? styles.warningButtonText : styles.primaryButtonText}>
-                    {myDoc?.isLocking
-                      ? `Unlock ${partnerDoc.displayName || 'Partner'}`
-                      : `Lock ${partnerDoc.displayName || 'Partner'}`}
+                {installedApps.length === 0 ? (
+                  <Text style={[styles.statusCardSub, {marginTop: 12, color: colors.textMuted}]}>
+                    No app list available. Ask your partner to open GeoBlock to sync their installed apps.
                   </Text>
+                ) : (
+                <ScrollView style={{maxHeight: 300, marginTop: 12}} nestedScrollEnabled={true}>
+                  {installedApps.map((app: any) => {
+                    const isSelected = selectedApps.includes(app.packageName);
+                    return (
+                      <TouchableOpacity
+                        key={app.id || app.packageName}
+                        style={[styles.appRow, isSelected && styles.appRowSelected]}
+                        onPress={() => toggleAppSelection(app.packageName)}>
+                        <Text style={[styles.appRowText, isSelected && styles.appRowTextSelected]} numberOfLines={1}>
+                          {app.appName}
+                        </Text>
+                        <MaterialIcons
+                          name={isSelected ? 'check-box' : 'check-box-outline-blank'}
+                          size={22}
+                          color={isSelected ? colors.accent : colors.textMuted}
+                        />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                )}
+                <TouchableOpacity
+                  style={[styles.primaryButton, {marginTop: 14}]}
+                  onPress={handleSavePartnerApps}
+                  disabled={savingApps}>
+                  {savingApps
+                    ? <ActivityIndicator color="#fff" />
+                    : <Text style={styles.primaryButtonText}>
+                        {selectedApps.length > 0
+                          ? `Block ${selectedApps.length} App(s)`
+                          : 'Clear All Blocks'}
+                      </Text>}
                 </TouchableOpacity>
               </View>
 
@@ -373,18 +437,19 @@ export default function LockScreen() {
                 <Text style={styles.ghostButtonText}>Disconnect Partner</Text>
               </TouchableOpacity>
             </View>
-          )}
+          )})()}
 
           {/* Loading / error */}
           {!myDoc && !firestoreError && <ActivityIndicator color="#4f46e5" style={{marginTop: 20}} />}
           {firestoreError && (
             <View style={styles.errorBanner}>
-              <Text style={styles.errorBannerText}>Couldn't connect to server. Check your internet connection.</Text>
+              <Text style={styles.errorBannerText}>Couldn't connect to server: {firestoreError}</Text>
               <TouchableOpacity onPress={() => {
                 setFirestoreError(false);
+                setMyDoc(null);
                 getOrCreateUserDoc()
                   .then(doc => { setMyDoc(doc); })
-                  .catch(() => setFirestoreError(true));
+                  .catch((e: any) => setFirestoreError(e?.message || 'Unknown error'));
               }}>
                 <Text style={styles.errorBannerRetry}>Retry</Text>
               </TouchableOpacity>
@@ -400,14 +465,21 @@ export default function LockScreen() {
       {lockHistory.length > 0 && (
         <View style={styles.historySection}>
           <Text style={styles.historySectionTitle}>Activity</Text>
-          {lockHistory.slice(0, 10).map(event => (
+          {lockHistory.slice(0, showAllHistory ? lockHistory.length : 3).map(event => (
             <View key={event.id} style={styles.historyRow}>
               <Text style={styles.historyLabel}>{event.label}</Text>
               <Text style={styles.historyTime}>{formatAge(event.timestamp)}</Text>
             </View>
           ))}
+          {!showAllHistory && lockHistory.length > 3 && (
+            <TouchableOpacity style={styles.showMoreBtn} onPress={() => setShowAllHistory(true)}>
+              <Text style={styles.showMoreText}>Show More ({lockHistory.length - 3} more)</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
+
+      <SettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
 
       {isAdmin && (
         <TouchableOpacity style={styles.devButton} onPress={devResetLock}>
@@ -435,14 +507,15 @@ function createStyles(c: Colors) {
     optionDesc: {fontSize: 13, color: c.textSecondary, lineHeight: 20, marginBottom: 12},
     optionLink: {fontSize: 13, fontWeight: '600', color: c.accent},
     optionGhostIcon: {opacity: 0.15},
-    securityBanner: {flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderRadius: 14, padding: 18, borderWidth: 1, borderColor: c.border, marginTop: 4},
-    securityDot: {width: 8, height: 8, borderRadius: 4, backgroundColor: c.accent, marginRight: 8},
-    securityText: {fontSize: 12, fontWeight: '700', color: c.textSecondary, letterSpacing: 1.5},
     statusCard: {borderRadius: 16, padding: 18, marginBottom: 16, borderWidth: 1, backgroundColor: c.surface, borderColor: c.border},
     statusCardLocked: {backgroundColor: c.cardLocked, borderColor: c.cardLockedBorder},
     statusCardUnlocked: {backgroundColor: c.surface, borderColor: c.border},
     statusCardTitle: {fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 6},
     statusCardSub: {fontSize: 14, color: c.textSecondary, lineHeight: 21},
+    appRow: {flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 14, backgroundColor: c.inputBg, borderRadius: 10, marginBottom: 8, borderWidth: 1, borderColor: c.border},
+    appRowSelected: {backgroundColor: c.accent + '15', borderColor: c.accent + '40'},
+    appRowText: {fontSize: 15, fontWeight: '600', color: c.text, flex: 1, marginRight: 12},
+    appRowTextSelected: {color: c.accent},
     primaryButton: {backgroundColor: c.accent, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 12},
     primaryButtonText: {color: '#fff', fontWeight: '700', fontSize: 15},
     warningButton: {backgroundColor: c.dangerBg, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: c.dangerBorder},
@@ -473,5 +546,7 @@ function createStyles(c: Colors) {
     errorBannerRetry: {color: c.danger, fontWeight: '700', fontSize: 13},
     devButton: {marginTop: 24, alignItems: 'center', padding: 8},
     devButtonText: {color: c.textFaint, fontSize: 12},
+    showMoreBtn: {paddingVertical: 10, alignItems: 'center'},
+    showMoreText: {fontSize: 13, color: c.accent, fontWeight: '600'},
   });
 }

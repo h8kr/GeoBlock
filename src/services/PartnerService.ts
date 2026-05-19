@@ -1,5 +1,6 @@
 import {getFirestore, collection, doc, getDoc, setDoc, updateDoc, query, where, getDocs, onSnapshot} from '@react-native-firebase/firestore';
 import {getAuth} from '@react-native-firebase/auth';
+import InstalledAppsModule from '../native/InstalledAppsModule';
 
 function randomCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -11,6 +12,12 @@ export interface UserDoc {
   inviteCode: string;
   partnerId: string | null;
   isLocking: boolean;
+  partnerBlockedPackages: string[]; // packages your partner chose to block on YOUR device
+  installedApps?: {id: string; packageName: string; appName: string}[]; // Apps installed on this device
+}
+
+function snapExists(snap: any): boolean {
+  return typeof snap.exists === 'function' ? snap.exists() : !!snap.exists;
 }
 
 export async function getOrCreateUserDoc(): Promise<UserDoc> {
@@ -19,18 +26,38 @@ export async function getOrCreateUserDoc(): Promise<UserDoc> {
   const db = getFirestore();
   const ref = doc(db, 'users', uid);
   const snap = await getDoc(ref);
-  if (!snap.exists) {
+  if (!snapExists(snap) || !snap.data()) {
+    const installed = await InstalledAppsModule.getInstalledApps().catch(() => []);
     const data: UserDoc = {
       displayName: getAuth().currentUser?.displayName ?? '',
       email: getAuth().currentUser?.email ?? '',
       inviteCode: randomCode(),
       partnerId: null,
       isLocking: false,
+      partnerBlockedPackages: [],
+      installedApps: installed,
     };
     await setDoc(ref, data);
     return data;
   }
-  return snap.data() as UserDoc;
+  // Ensure partnerBlockedPackages exists for older docs
+  const data = snap.data() as any;
+  let needsUpdate = false;
+  if (!data.partnerBlockedPackages) {
+    data.partnerBlockedPackages = [];
+    needsUpdate = true;
+  }
+  if (!data.installedApps || data.installedApps.length === 0) {
+    data.installedApps = await InstalledAppsModule.getInstalledApps().catch(() => []);
+    needsUpdate = true;
+  }
+  if (needsUpdate) {
+    await updateDoc(ref, {
+      partnerBlockedPackages: data.partnerBlockedPackages,
+      installedApps: data.installedApps,
+    });
+  }
+  return data as UserDoc;
 }
 
 export async function connectPartner(code: string): Promise<UserDoc> {
@@ -54,10 +81,24 @@ export async function disconnectPartner(): Promise<void> {
   const db = getFirestore();
   const snap = await getDoc(doc(db, 'users', uid));
   const partnerId = (snap.data() as UserDoc)?.partnerId;
-  await updateDoc(doc(db, 'users', uid), {partnerId: null, isLocking: false});
+  await updateDoc(doc(db, 'users', uid), {partnerId: null, isLocking: false, partnerBlockedPackages: []});
   if (partnerId) {
-    await updateDoc(doc(db, 'users', partnerId), {partnerId: null, isLocking: false});
+    await updateDoc(doc(db, 'users', partnerId), {partnerId: null, isLocking: false, partnerBlockedPackages: []});
   }
+}
+
+/** Set which apps to block on your PARTNER's device */
+export async function setPartnerBlockedApps(partnerUid: string, packages: string[]): Promise<void> {
+  const uid = getAuth().currentUser?.uid;
+  if (!uid) return;
+  const db = getFirestore();
+  // Write to YOUR OWN doc — you are the locker, partner subscribes to your doc to get these
+  await updateDoc(doc(db, 'users', uid), {
+    partnerBlockedPackages: packages,
+    isLocking: packages.length > 0,
+  });
+  // Clear stale isLocking from partner's doc (previous code incorrectly wrote it there)
+  await updateDoc(doc(db, 'users', partnerUid), {isLocking: false});
 }
 
 export async function setLocking(isLocking: boolean): Promise<void> {
@@ -71,6 +112,12 @@ export function subscribeToPartner(
   onData: (doc: UserDoc) => void,
 ): () => void {
   return onSnapshot(doc(getFirestore(), 'users', partnerId), snap => {
-    if (snap.exists) onData(snap.data() as UserDoc);
+    if (snapExists(snap) && snap.data()) {
+      const data = snap.data() as any;
+      if (!data.partnerBlockedPackages) {
+        data.partnerBlockedPackages = [];
+      }
+      onData(data as UserDoc);
+    }
   });
 }
